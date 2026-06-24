@@ -1,0 +1,2 @@
+- [PulseFlow architecture](pulseflow-arch.md) — DB lib stale declarations bug: after adding schema files, always run `pnpm run typecheck:libs` before api-server typecheck
+- [PulseFlow stack](pulseflow-arch.md) — single-tenant MVP (DEFAULT_BUSINESS_ID=1), WhatsApp sandbox mode unless env vars set, rule-based AI intent engine

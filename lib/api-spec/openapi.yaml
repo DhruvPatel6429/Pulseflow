@@ -3,20 +3,40 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PulseFlow API - AI WhatsApp front desk for beauty & wellness businesses
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: business
+    description: Business profile operations
+  - name: services
+    description: Service catalog operations
+  - name: customers
+    description: Customer management
+  - name: bookings
+    description: Booking management
+  - name: conversations
+    description: WhatsApp conversations
+  - name: ai
+    description: AI actions and inbox
+  - name: automation
+    description: Automation settings
+  - name: dashboard
+    description: Dashboard and analytics
+  - name: webhooks
+    description: WhatsApp webhooks
+  - name: jobs
+    description: Reminder and automation jobs
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +44,1299 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Business ─────────────────────────────────────────────────────────────
+  /business:
+    get:
+      operationId: getBusiness
+      tags: [business]
+      summary: Get business profile
+      responses:
+        "200":
+          description: Business profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Business"
+        "404":
+          description: Not found
+    post:
+      operationId: createBusiness
+      tags: [business]
+      summary: Create business profile (onboarding)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Business"
+    patch:
+      operationId: updateBusiness
+      tags: [business]
+      summary: Update business profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessPatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Business"
+
+  # ─── Services ──────────────────────────────────────────────────────────────
+  /services:
+    get:
+      operationId: listServices
+      tags: [services]
+      summary: List all services
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Service"
+    post:
+      operationId: createService
+      tags: [services]
+      summary: Create a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+
+  /services/{id}:
+    get:
+      operationId: getService
+      tags: [services]
+      summary: Get a service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+    patch:
+      operationId: updateService
+      tags: [services]
+      summary: Update a service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServicePatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+    delete:
+      operationId: deleteService
+      tags: [services]
+      summary: Delete a service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── Customers ─────────────────────────────────────────────────────────────
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerList"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer with visit history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDetail"
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  # ─── Bookings ──────────────────────────────────────────────────────────────
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: serviceId
+          in: query
+          schema:
+            type: integer
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "409":
+          description: Conflict - slot unavailable
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    patch:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingPatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/confirm:
+    post:
+      operationId: confirmBooking
+      tags: [bookings]
+      summary: Confirm a pending booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/cancel:
+    post:
+      operationId: cancelBooking
+      tags: [bookings]
+      summary: Cancel a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingCancelInput"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/complete:
+    post:
+      operationId: completeBooking
+      tags: [bookings]
+      summary: Mark booking as completed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/no-show:
+    post:
+      operationId: markNoShow
+      tags: [bookings]
+      summary: Mark booking as no-show
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Marked no-show
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/reschedule:
+    post:
+      operationId: rescheduleBooking
+      tags: [bookings]
+      summary: Reschedule a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingRescheduleInput"
+      responses:
+        "200":
+          description: Rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "409":
+          description: Slot unavailable
+
+  /bookings/available-slots:
+    get:
+      operationId: getAvailableSlots
+      tags: [bookings]
+      summary: Get available booking slots for a date and service
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: serviceId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Available time slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlotList"
+
+  # ─── Conversations ──────────────────────────────────────────────────────────
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get conversation with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+
+  /conversations/{id}/send:
+    post:
+      operationId: sendMessage
+      tags: [conversations]
+      summary: Send a message in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  # ─── AI ────────────────────────────────────────────────────────────────────
+  /ai/inbox:
+    get:
+      operationId: getAiInbox
+      tags: [ai]
+      summary: Get pending AI actions needing review
+      responses:
+        "200":
+          description: AI action items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AIActionLog"
+
+  /ai/process:
+    post:
+      operationId: processMessage
+      tags: [ai]
+      summary: Process inbound customer message through AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiMessageInput"
+      responses:
+        "200":
+          description: AI intent result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIIntentResult"
+
+  /ai/actions/{id}/approve:
+    post:
+      operationId: approveAiAction
+      tags: [ai]
+      summary: Approve a pending AI action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiApproveInput"
+      responses:
+        "200":
+          description: Action approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIActionLog"
+
+  /ai/actions/{id}/reject:
+    post:
+      operationId: rejectAiAction
+      tags: [ai]
+      summary: Reject a pending AI action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Action rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIActionLog"
+
+  # ─── Automation ─────────────────────────────────────────────────────────────
+  /automation:
+    get:
+      operationId: getAutomation
+      tags: [automation]
+      summary: Get automation settings
+      responses:
+        "200":
+          description: Automation settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationSettings"
+    patch:
+      operationId: updateAutomation
+      tags: [automation]
+      summary: Update automation settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationPatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationSettings"
+
+  # ─── Jobs / Reminders ──────────────────────────────────────────────────────
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List scheduled reminder jobs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Jobs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReminderJob"
+
+  /jobs/{id}/trigger:
+    post:
+      operationId: triggerJob
+      tags: [jobs]
+      summary: Manually trigger a reminder job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReminderJob"
+
+  # ─── Dashboard ──────────────────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard overview stats
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/today:
+    get:
+      operationId: getTodayBookings
+      tags: [dashboard]
+      summary: Get today's bookings
+      responses:
+        "200":
+          description: Today's bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+
+  /dashboard/upcoming:
+    get:
+      operationId: getUpcomingBookings
+      tags: [dashboard]
+      summary: Get upcoming bookings (next 7 days)
+      responses:
+        "200":
+          description: Upcoming bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+
+  # ─── WhatsApp Webhook ────────────────────────────────────────────────────────
+  /webhooks/whatsapp:
+    get:
+      operationId: verifyWhatsappWebhook
+      tags: [webhooks]
+      summary: Verify WhatsApp webhook (Meta challenge)
+      parameters:
+        - name: hub.mode
+          in: query
+          schema:
+            type: string
+        - name: hub.verify_token
+          in: query
+          schema:
+            type: string
+        - name: hub.challenge
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Verification challenge
+    post:
+      operationId: receiveWhatsappWebhook
+      tags: [webhooks]
+      summary: Receive inbound WhatsApp message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappWebhookPayload"
+      responses:
+        "200":
+          description: Accepted
+
+  # ─── Mock WhatsApp (sandbox) ─────────────────────────────────────────────────
+  /sandbox/send-message:
+    post:
+      operationId: sandboxSendMessage
+      tags: [webhooks]
+      summary: Simulate inbound WhatsApp message for testing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxMessageInput"
+      responses:
+        "200":
+          description: Processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIIntentResult"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    # ─── Business ────────────────────────────────────────────────────────────
+    WorkingHours:
+      type: object
+      description: Map of day (mon-sun) to open/close times
+      properties:
+        mon: { $ref: "#/components/schemas/DayHours" }
+        tue: { $ref: "#/components/schemas/DayHours" }
+        wed: { $ref: "#/components/schemas/DayHours" }
+        thu: { $ref: "#/components/schemas/DayHours" }
+        fri: { $ref: "#/components/schemas/DayHours" }
+        sat: { $ref: "#/components/schemas/DayHours" }
+        sun: { $ref: "#/components/schemas/DayHours" }
+
+    DayHours:
+      type: object
+      required: [open, close, isOpen]
+      properties:
+        open: { type: string, description: "HH:MM" }
+        close: { type: string, description: "HH:MM" }
+        isOpen: { type: boolean }
+
+    Business:
+      type: object
+      required: [id, name, ownerName, phone, category, createdAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        ownerName: { type: string }
+        phone: { type: string }
+        whatsappNumber: { type: ["string", "null"] }
+        city: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        googleMapsLink: { type: ["string", "null"] }
+        category: { type: string }
+        description: { type: ["string", "null"] }
+        timezone: { type: string }
+        workingHours: {}
+        cancellationPolicy: { type: ["string", "null"] }
+        tokenPolicy: { type: ["string", "null"] }
+        preferredTone: { type: string }
+        reviewLink: { type: ["string", "null"] }
+        whatsappVerifyToken: { type: ["string", "null"] }
+        isOnboarded: { type: boolean }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    BusinessInput:
+      type: object
+      required: [name, ownerName, phone, category]
+      properties:
+        name: { type: string }
+        ownerName: { type: string }
+        phone: { type: string }
+        whatsappNumber: { type: string }
+        city: { type: string }
+        address: { type: string }
+        googleMapsLink: { type: string }
+        category: { type: string }
+        description: { type: string }
+        timezone: { type: string }
+        workingHours: {}
+        cancellationPolicy: { type: string }
+        tokenPolicy: { type: string }
+        preferredTone: { type: string }
+        reviewLink: { type: string }
+
+    BusinessPatch:
+      type: object
+      properties:
+        name: { type: string }
+        ownerName: { type: string }
+        phone: { type: string }
+        whatsappNumber: { type: string }
+        city: { type: string }
+        address: { type: string }
+        googleMapsLink: { type: string }
+        category: { type: string }
+        description: { type: string }
+        timezone: { type: string }
+        workingHours: {}
+        cancellationPolicy: { type: string }
+        tokenPolicy: { type: string }
+        preferredTone: { type: string }
+        reviewLink: { type: string }
+        whatsappVerifyToken: { type: string }
+        isOnboarded: { type: boolean }
+
+    # ─── Service ─────────────────────────────────────────────────────────────
+    Service:
+      type: object
+      required: [id, businessId, name, price, durationMinutes, isActive, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        name: { type: string }
+        category: { type: ["string", "null"] }
+        price: { type: number }
+        durationMinutes: { type: integer }
+        description: { type: ["string", "null"] }
+        requiresConsultation: { type: boolean }
+        requiresTokenAdvance: { type: boolean }
+        repeatReminderDays: { type: ["integer", "null"] }
+        isActive: { type: boolean }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    ServiceInput:
+      type: object
+      required: [name, price, durationMinutes]
+      properties:
+        name: { type: string }
+        category: { type: string }
+        price: { type: number }
+        durationMinutes: { type: integer }
+        description: { type: string }
+        requiresConsultation: { type: boolean }
+        requiresTokenAdvance: { type: boolean }
+        repeatReminderDays: { type: integer }
+        isActive: { type: boolean }
+
+    ServicePatch:
+      type: object
+      properties:
+        name: { type: string }
+        category: { type: string }
+        price: { type: number }
+        durationMinutes: { type: integer }
+        description: { type: string }
+        requiresConsultation: { type: boolean }
+        requiresTokenAdvance: { type: boolean }
+        repeatReminderDays: { type: integer }
+        isActive: { type: boolean }
+
+    # ─── Customer ────────────────────────────────────────────────────────────
+    Customer:
+      type: object
+      required: [id, businessId, name, phone, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        lastVisitAt: { type: ["string", "null"] }
+        totalVisits: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    CustomerDetail:
+      type: object
+      required: [id, businessId, name, phone, createdAt, bookings]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        lastVisitAt: { type: ["string", "null"] }
+        totalVisits: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        bookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        upcomingBooking:
+          $ref: "#/components/schemas/Booking"
+
+    CustomerList:
+      type: object
+      required: [customers, total]
+      properties:
+        customers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Customer"
+        total: { type: integer }
+
+    CustomerInput:
+      type: object
+      required: [name, phone]
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: string }
+        source: { type: string }
+
+    CustomerPatch:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: string }
+        source: { type: string }
+
+    # ─── Booking ─────────────────────────────────────────────────────────────
+    Booking:
+      type: object
+      required: [id, businessId, serviceId, bookingDate, startTime, endTime, status, source, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        serviceId: { type: integer }
+        bookingDate: { type: string, description: "YYYY-MM-DD" }
+        startTime: { type: string, description: "HH:MM" }
+        endTime: { type: string, description: "HH:MM" }
+        status: { type: string, enum: [pending, confirmed, completed, cancelled, no_show, rescheduled] }
+        source: { type: string, enum: [whatsapp, manual, dashboard] }
+        notes: { type: ["string", "null"] }
+        createdByAI: { type: boolean }
+        reminder24hSent: { type: boolean }
+        reminder2hSent: { type: boolean }
+        reviewRequestSent: { type: boolean }
+        repeatReminderScheduledAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        customer:
+          $ref: "#/components/schemas/Customer"
+        service:
+          $ref: "#/components/schemas/Service"
+
+    BookingInput:
+      type: object
+      required: [serviceId, bookingDate, startTime]
+      properties:
+        customerId: { type: integer }
+        serviceId: { type: integer }
+        bookingDate: { type: string }
+        startTime: { type: string }
+        source: { type: string }
+        notes: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: string }
+
+    BookingPatch:
+      type: object
+      properties:
+        notes: { type: string }
+        status: { type: string }
+
+    BookingCancelInput:
+      type: object
+      properties:
+        reason: { type: string }
+
+    BookingRescheduleInput:
+      type: object
+      required: [bookingDate, startTime]
+      properties:
+        bookingDate: { type: string }
+        startTime: { type: string }
+        notes: { type: string }
+
+    SlotList:
+      type: object
+      required: [date, serviceId, slots]
+      properties:
+        date: { type: string }
+        serviceId: { type: integer }
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSlot"
+
+    TimeSlot:
+      type: object
+      required: [startTime, endTime, available]
+      properties:
+        startTime: { type: string }
+        endTime: { type: string }
+        available: { type: boolean }
+
+    # ─── Conversation / Message ───────────────────────────────────────────────
+    Conversation:
+      type: object
+      required: [id, businessId, channel, status, lastMessageAt, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        channel: { type: string }
+        status: { type: string }
+        lastMessageAt: { type: string }
+        createdAt: { type: string }
+        customer:
+          $ref: "#/components/schemas/Customer"
+        lastMessage:
+          $ref: "#/components/schemas/Message"
+        pendingAiAction: { type: boolean }
+
+    ConversationDetail:
+      type: object
+      required: [id, businessId, channel, status, messages, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        channel: { type: string }
+        status: { type: string }
+        lastMessageAt: { type: string }
+        createdAt: { type: string }
+        customer:
+          $ref: "#/components/schemas/Customer"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+
+    Message:
+      type: object
+      required: [id, conversationId, direction, content, createdAt]
+      properties:
+        id: { type: integer }
+        conversationId: { type: integer }
+        direction: { type: string, enum: [inbound, outbound] }
+        content: { type: string }
+        messageType: { type: string }
+        providerMessageId: { type: ["string", "null"] }
+        aiGenerated: { type: boolean }
+        requiresApproval: { type: boolean }
+        sentAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+
+    # ─── AI ──────────────────────────────────────────────────────────────────
+    AIActionLog:
+      type: object
+      required: [id, businessId, actionType, status, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        bookingId: { type: ["integer", "null"] }
+        conversationId: { type: ["integer", "null"] }
+        actionType: { type: string }
+        inputSummary: { type: ["string", "null"] }
+        outputSummary: { type: ["string", "null"] }
+        replyDraft: { type: ["string", "null"] }
+        confidenceScore: { type: ["number", "null"] }
+        status: { type: string, enum: [pending, approved, rejected, auto_sent] }
+        requiresHumanReview: { type: boolean }
+        createdAt: { type: string }
+        customer:
+          $ref: "#/components/schemas/Customer"
+
+    AIIntentResult:
+      type: object
+      required: [intent, confidence, replyDraft]
+      properties:
+        intent:
+          type: string
+          enum: [price_inquiry, availability_inquiry, booking_request, reschedule_request, cancel_request, location_inquiry, faq, unknown]
+        confidence: { type: number }
+        extractedEntities:
+          type: object
+          properties:
+            serviceName: { type: string }
+            requestedDate: { type: string }
+            requestedTime: { type: string }
+            customerName: { type: string }
+        actionSuggestion:
+          type: object
+          properties:
+            shouldReply: { type: boolean }
+            shouldCreatePendingBooking: { type: boolean }
+            shouldAskFollowUpQuestion: { type: boolean }
+            shouldEscalateToOwner: { type: boolean }
+        replyDraft: { type: string }
+        availableSlots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSlot"
+        matchedService:
+          $ref: "#/components/schemas/Service"
+        bookingCreated:
+          $ref: "#/components/schemas/Booking"
+
+    AiMessageInput:
+      type: object
+      required: [message, customerPhone]
+      properties:
+        message: { type: string }
+        customerPhone: { type: string }
+        customerName: { type: string }
+        conversationId: { type: integer }
+
+    AiApproveInput:
+      type: object
+      properties:
+        editedReply: { type: string }
+
+    # ─── Automation ──────────────────────────────────────────────────────────
+    AutomationSettings:
+      type: object
+      required: [id, businessId]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        reminder24hEnabled: { type: boolean }
+        reminder2hEnabled: { type: boolean }
+        reviewRequestEnabled: { type: boolean }
+        reviewRequestDelayHours: { type: integer }
+        repeatReminderEnabled: { type: boolean }
+        aiAutoReplyEnabled: { type: boolean }
+        aiConfidenceThreshold: { type: number }
+        reviewTemplate: { type: ["string", "null"] }
+        reminderTemplate: { type: ["string", "null"] }
+        updatedAt: { type: string }
+
+    AutomationPatch:
+      type: object
+      properties:
+        reminder24hEnabled: { type: boolean }
+        reminder2hEnabled: { type: boolean }
+        reviewRequestEnabled: { type: boolean }
+        reviewRequestDelayHours: { type: integer }
+        repeatReminderEnabled: { type: boolean }
+        aiAutoReplyEnabled: { type: boolean }
+        aiConfidenceThreshold: { type: number }
+        reviewTemplate: { type: string }
+        reminderTemplate: { type: string }
+
+    # ─── Jobs ────────────────────────────────────────────────────────────────
+    ReminderJob:
+      type: object
+      required: [id, businessId, type, scheduledFor, status, createdAt]
+      properties:
+        id: { type: integer }
+        businessId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        bookingId: { type: ["integer", "null"] }
+        type: { type: string, enum: [booking_confirmation, reminder_24h, reminder_2h, review_request, repeat_reminder] }
+        scheduledFor: { type: string }
+        status: { type: string, enum: [pending, sent, failed, cancelled] }
+        payload: {}
+        sentAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+        customer:
+          $ref: "#/components/schemas/Customer"
+        booking:
+          $ref: "#/components/schemas/Booking"
+
+    # ─── Dashboard ───────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [todayCount, upcomingCount, pendingAiActions, totalCustomers, completedThisWeek, revenueThisWeek, noShowRate]
+      properties:
+        todayCount: { type: integer }
+        upcomingCount: { type: integer }
+        pendingAiActions: { type: integer }
+        totalCustomers: { type: integer }
+        completedThisWeek: { type: integer }
+        revenueThisWeek: { type: number }
+        noShowRate: { type: number }
+        remindersDueToday: { type: integer }
+        reviewsSentThisWeek: { type: integer }
+        repeatRemindersScheduled: { type: integer }
+        bookingsByStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        topServices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceCount"
+
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status: { type: string }
+        count: { type: integer }
+
+    ServiceCount:
+      type: object
+      required: [serviceId, name, count]
+      properties:
+        serviceId: { type: integer }
+        name: { type: string }
+        count: { type: integer }
+        revenue: { type: number }
+
+    # ─── WhatsApp ────────────────────────────────────────────────────────────
+    WhatsappWebhookPayload:
+      type: object
+      properties:
+        object: { type: string }
+        entry: {}
+
+    SandboxMessageInput:
+      type: object
+      required: [message, customerPhone]
+      properties:
+        message: { type: string }
+        customerPhone: { type: string }
+        customerName: { type: string }

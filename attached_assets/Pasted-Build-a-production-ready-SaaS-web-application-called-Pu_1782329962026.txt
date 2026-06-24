@@ -1,0 +1,387 @@
+Build a production-ready SaaS web application called **PulseFlow**.
+
+## Product Overview
+PulseFlow is an **AI WhatsApp front desk for solo beauty & wellness businesses in India**. It helps salons, beauticians, makeup artists, nail artists, and small wellness studios automate customer communication and operational workflows on WhatsApp.
+
+PulseFlow should not be built as a generic CRM. It should be built as a **vertical AI workflow product** focused on turning WhatsApp inquiries into:
+- confirmed bookings
+- automated reminders
+- reduced no-shows
+- post-service review requests
+- repeat-visit follow-up nudges
+
+The target users are solo beauty/wellness businesses with 1–5 staff who currently manage bookings manually on WhatsApp.
+
+---
+
+# Primary Goal
+Build a **usable production-grade MVP** of PulseFlow that a real pilot customer could use.
+
+The system must allow a beauty business owner to:
+1. configure their business profile, services, prices, durations, working hours, and booking rules
+2. connect a WhatsApp number via WhatsApp Business Cloud API integration-ready architecture
+3. let customers message on WhatsApp and receive AI-generated responses
+4. capture booking requests and convert them into structured appointments
+5. send booking confirmations and reminders
+6. trigger post-service review requests
+7. trigger repeat-visit reminders after configurable intervals
+8. give the owner a lightweight dashboard to monitor and override AI actions when needed
+
+---
+
+# Non-Negotiable Product Positioning
+This is NOT a horizontal CRM.
+This is an **AI WhatsApp Front Desk for solo beauty & wellness businesses**.
+
+The UX, database, terminology, and workflows must reflect this niche:
+- beauty services
+- appointment durations
+- slot booking
+- reschedule / cancellation
+- bridal / premium services with optional token payments later
+- review requests
+- repeat visit reminders
+
+---
+
+# Build Requirements
+I want you to build this as a **production-ready full-stack app**, not a hackathon prototype.
+
+## Use the following stack
+- **Frontend:** Next.js 14+ with TypeScript and App Router
+- **UI:** Tailwind CSS + shadcn/ui
+- **Backend/API:** Next.js server actions / route handlers OR a clean Node backend inside the same repo if needed
+- **Database:** PostgreSQL with Prisma ORM
+- **Auth:** NextAuth or Clerk (choose the simplest production-grade option)
+- **Background jobs / scheduling:** use a reliable queue/scheduler architecture suitable for reminders and delayed workflows. If Replit has limitations, create a clean abstraction layer that can later be swapped to Upstash/QStash, BullMQ, Trigger.dev, or a cron worker.
+- **AI:** OpenAI API abstraction layer with clean prompt orchestration
+- **WhatsApp integration:** architect around Meta WhatsApp Cloud API webhook + send-message flows, even if sandbox mode/mock mode is needed first
+- **Validation:** Zod
+- **State / forms:** React Hook Form where appropriate
+- **Logging:** structured logging
+- **Environment config:** proper `.env.example`
+- **Error handling:** production-safe error boundaries and API error responses
+- **Deployment readiness:** codebase should be clean, typed, modular, and easy to deploy
+
+---
+
+# Product Scope: Phase 1 MVP
+Implement the following modules.
+
+---
+
+# 1. Authentication & Multi-Tenant Business Accounts
+Create a multi-tenant SaaS architecture.
+
+Each business account should have:
+- owner user account
+- business profile
+- service catalog
+- booking settings
+- WhatsApp integration settings
+- customers
+- bookings
+- automation settings
+- AI knowledge base / FAQ context
+
+Data from one business must never leak into another business.
+
+---
+
+# 2. Business Onboarding Flow
+Create a beautiful onboarding flow for a salon / beauty business owner.
+
+Collect:
+- business name
+- owner name
+- phone number
+- city
+- business category (salon, home salon, bridal makeup, nail studio, skincare, wellness, etc.)
+- business description
+- working days
+- opening/closing hours
+- business address / Google Maps link
+- cancellation policy
+- advance payment / token rules (can be stored even if not fully active in MVP)
+- WhatsApp number
+- preferred response tone (friendly / premium / concise / warm)
+
+Also collect service setup:
+For each service:
+- service name
+- category
+- price
+- duration
+- description
+- whether it requires consultation
+- whether it requires token advance
+- follow-up interval in days for repeat reminder (e.g. facial after 30 days, haircut after 45 days)
+
+The onboarding should seed the business knowledge base used by the AI responder.
+
+---
+
+# 3. Core Data Models
+Design clean Prisma models for at least the following:
+
+## User
+- id
+- name
+- email
+- role
+- businessId
+- createdAt
+- updatedAt
+
+## Business
+- id
+- name
+- ownerName
+- phone
+- whatsappNumber
+- city
+- address
+- googleMapsLink
+- category
+- description
+- timezone
+- workingHours
+- cancellationPolicy
+- tokenPolicy
+- preferredTone
+- createdAt
+- updatedAt
+
+## Service
+- id
+- businessId
+- name
+- category
+- price
+- durationMinutes
+- description
+- requiresConsultation
+- requiresTokenAdvance
+- repeatReminderDays
+- isActive
+
+## Customer
+- id
+- businessId
+- name
+- phone
+- notes
+- source
+- lastVisitAt
+- createdAt
+- updatedAt
+
+## Booking
+- id
+- businessId
+- customerId
+- serviceId
+- bookingDate
+- startTime
+- endTime
+- status (pending, confirmed, completed, cancelled, no_show, rescheduled)
+- source (whatsapp, manual, dashboard)
+- notes
+- createdByAI boolean
+- reminder24hSent boolean
+- reminder2hSent boolean
+- reviewRequestSent boolean
+- repeatReminderScheduledAt nullable
+- createdAt
+- updatedAt
+
+## Conversation
+- id
+- businessId
+- customerId
+- channel
+- lastMessageAt
+- status
+
+## Message
+- id
+- conversationId
+- direction (inbound/outbound)
+- content
+- messageType
+- providerMessageId
+- aiGenerated boolean
+- requiresApproval boolean
+- sentAt
+- createdAt
+
+## AIActionLog
+- id
+- businessId
+- customerId nullable
+- bookingId nullable
+- actionType
+- inputSummary
+- outputSummary
+- confidenceScore nullable
+- status
+- requiresHumanReview boolean
+- createdAt
+
+## ReviewRequest
+- id
+- businessId
+- customerId
+- bookingId
+- status
+- sentAt
+- createdAt
+
+## ReminderJob / AutomationEvent
+Create a table or clean abstraction for scheduled jobs:
+- id
+- businessId
+- customerId nullable
+- bookingId nullable
+- type (booking_confirmation, reminder_24h, reminder_2h, review_request, repeat_reminder)
+- scheduledFor
+- status
+- payload JSON
+- sentAt nullable
+- createdAt
+
+Also create any additional supporting tables you need.
+
+---
+
+# 4. Owner Dashboard
+Build a polished mobile-first dashboard.
+
+## Dashboard pages
+### A. Overview
+Show:
+- today’s bookings
+- upcoming bookings
+- pending AI approvals
+- reminders due today
+- recent customer conversations
+- review requests sent this week
+- repeat reminders scheduled
+
+### B. Bookings
+Allow owner to:
+- view bookings in list/calendar style
+- filter by date/status/service
+- manually create booking
+- confirm/cancel/reschedule booking
+- mark service completed
+- mark no-show
+
+### C. Customers
+Show:
+- customer name
+- phone
+- visit history
+- last service
+- notes
+- upcoming booking
+- repeat reminder eligibility
+
+### D. Services
+CRUD for service catalog.
+
+### E. AI Inbox / Conversations
+Show recent conversations and AI actions.
+Allow owner to:
+- see inbound customer messages
+- see AI drafted replies
+- approve / edit / send if low confidence
+- inspect extracted booking intent
+
+### F. Automations
+Settings page for:
+- reminder timing
+- review request template
+- repeat reminder rules
+- business response tone
+- AI approval threshold
+
+### G. Settings
+Business profile, WhatsApp settings, review link, staff-free basic settings.
+
+---
+
+# 5. WhatsApp Integration Architecture
+Build the codebase so it is ready for Meta WhatsApp Cloud API.
+
+## Implement:
+- a webhook endpoint for inbound WhatsApp messages
+- a service layer that normalizes inbound messages into internal Conversation + Message records
+- an outbound messaging service abstraction
+- provider adapters architecture, even if only WhatsApp is used now
+
+### Important:
+If direct live WhatsApp API setup is difficult inside Replit, implement:
+1. a real integration-ready service layer
+2. a **mock/sandbox mode** for testing from the dashboard
+3. clear comments and environment variables for how to connect the real WhatsApp Cloud API later
+
+Create files/modules like:
+- `/lib/channels/whatsapp.ts`
+- `/lib/channels/types.ts`
+- `/app/api/webhooks/whatsapp/route.ts`
+
+The architecture must not be tightly coupled to one transport implementation.
+
+---
+
+# 6. AI Inquiry Responder
+This is the heart of the product.
+
+Build an AI orchestration layer that reads inbound customer WhatsApp messages and classifies them into business intents such as:
+- service price inquiry
+- availability inquiry
+- booking request
+- reschedule request
+- cancellation request
+- location inquiry
+- package inquiry
+- follow-up / post-service question
+- unknown / escalate
+
+## The AI layer must:
+1. use the business knowledge base (services, prices, durations, policies, working hours, location, FAQs)
+2. understand customer messages in natural language
+3. produce a structured response object, not just free text
+
+### Example AI output structure
+```ts
+type AIIntentResult = {
+  intent:
+    | "price_inquiry"
+    | "availability_inquiry"
+    | "booking_request"
+    | "reschedule_request"
+    | "cancel_request"
+    | "location_inquiry"
+    | "faq"
+    | "unknown";
+
+  confidence: number;
+
+  extractedEntities: {
+    serviceName?: string;
+    requestedDate?: string;
+    requestedTime?: string;
+    customerName?: string;
+  };
+
+  actionSuggestion: {
+    shouldReply: boolean;
+    shouldCreatePendingBooking: boolean;
+    shouldAskFollowUpQuestion: boolean;
+    shouldEscalateToOwner: boolean;
+  };
+
+  replyDraft: string;
+};
