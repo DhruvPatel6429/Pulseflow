@@ -10,6 +10,8 @@ import automationRouter from "./automation";
 import jobsRouter from "./jobs";
 import dashboardRouter from "./dashboard";
 import webhooksRouter from "./webhooks";
+import cronRouter from "./cron";
+import seedRouter from "./seed";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(automationRouter);
 router.use(jobsRouter);
 router.use(dashboardRouter);
 router.use(webhooksRouter);
+router.use(cronRouter);
+router.use(seedRouter);
 
 export default router;

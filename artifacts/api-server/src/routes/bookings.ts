@@ -9,7 +9,8 @@ import {
   CancelBookingBody,
   RescheduleBookingBody,
 } from "@workspace/api-zod";
-import { checkConflict, getAvailableSlots, scheduleReminderJobs } from "../lib/booking-engine";
+import { checkConflict, getAvailableSlots } from "../lib/booking-engine";
+import { scheduleBookingAutomations, scheduleCompletionAutomations } from "../lib/automation-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -118,18 +119,10 @@ router.post("/bookings", async (req, res): Promise<void> => {
     createdByAI: false,
   }).returning();
 
-  // Schedule reminder jobs
-  if (customerId) {
-    await scheduleReminderJobs(booking.id, DEFAULT_BUSINESS_ID, customerId, data.bookingDate, data.startTime);
-  }
-
-  // Update customer last visit
-  if (customerId) {
-    await db.update(customersTable).set({
-      totalVisits: db.select({ count: bookingsTable.id }).from(bookingsTable)
-        .where(and(eq(bookingsTable.customerId, customerId), eq(bookingsTable.status, "completed"))) as unknown as number,
-    }).where(eq(customersTable.id, customerId));
-  }
+  // Schedule automation events (confirmation, 24h reminder, 2h reminder)
+  await scheduleBookingAutomations(booking.id).catch((e) =>
+    logger.error({ bookingId: booking.id, e }, "Failed to schedule automations")
+  );
 
   const enriched = await enrichBooking(booking);
   res.status(201).json(enriched);
@@ -209,13 +202,19 @@ router.post("/bookings/:id/complete", async (req, res): Promise<void> => {
   }
   // Update customer last visit and visit count
   if (booking.customerId) {
-    const completedBookings = await db.select().from(bookingsTable)
+    const completedBookings = await db
+      .select({ id: bookingsTable.id })
+      .from(bookingsTable)
       .where(and(eq(bookingsTable.customerId, booking.customerId), eq(bookingsTable.status, "completed")));
     await db.update(customersTable).set({
       lastVisitAt: new Date(),
       totalVisits: completedBookings.length,
     }).where(eq(customersTable.id, booking.customerId));
   }
+  // Schedule review request + repeat reminder
+  await scheduleCompletionAutomations(booking.id).catch((e) =>
+    logger.error({ bookingId: booking.id, e }, "Failed to schedule completion automations")
+  );
   res.json(await enrichBooking(booking));
 });
 

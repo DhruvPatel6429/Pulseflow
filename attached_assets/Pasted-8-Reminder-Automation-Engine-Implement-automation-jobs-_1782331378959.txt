@@ -1,0 +1,334 @@
+8. Reminder Automation Engine
+
+Implement automation jobs for:
+
+immediate booking confirmation
+24-hour reminder
+2-hour reminder
+missed appointment follow-up
+post-service review request
+repeat-visit reminder
+
+The system must create scheduled automation events when a booking is created or completed.
+
+Example
+
+When a booking is confirmed:
+
+send confirmation message now
+schedule reminder 24h before
+schedule reminder 2h before
+
+When owner marks booking as completed:
+
+schedule review request after configurable delay
+schedule repeat reminder based on service.repeatReminderDays
+
+Even if true cron/queue execution is limited on Replit, build the system with a clean job abstraction:
+
+createAutomationEvent()
+processDueAutomationEvents()
+sendReminder()
+sendReviewRequest()
+sendRepeatReminder()
+
+Provide a safe fallback dev mode that can process pending jobs manually from the dashboard or via a protected admin route.
+
+9. Review Request Workflow
+
+After a service is completed, PulseFlow should be able to send:
+“Hope you loved your haircut! If you have a minute, please leave us a Google review here: [link]”
+
+Implement:
+
+business-level Google review link storage
+review request template
+automation trigger after completion
+ReviewRequest tracking table
+10. Repeat Visit Reminder Workflow
+
+Each service can define a repeat reminder interval.
+
+Example:
+
+Haircut → 30 or 45 days
+Facial → 30 days
+Brow service → 20 days
+
+When a completed booking exists, schedule a future reminder:
+“Hi Ananya! It’s been a while since your last facial. Want to book your next skin session this week?”
+
+This must be configurable and tied to the completed booking/service.
+
+11. AI Approval & Guardrails
+
+This is important.
+
+The product should support both:
+
+auto-send AI replies for safe/high-confidence repetitive cases
+owner approval for uncertain cases
+
+Implement an approval threshold system:
+
+if confidence >= threshold and intent is safe → auto-send
+if confidence < threshold OR premium/bridal ambiguity OR missing service match → queue for owner approval
+
+Owner should see pending approvals in dashboard.
+
+12. Seed Demo Data + Demo Mode
+
+I want the app to be demoable immediately.
+
+Create a demo business such as:
+
+“GlowNest Studio”
+with sample services like haircut, hair spa, bridal makeup, cleanup, facial, nail extensions
+sample pricing
+sample working hours
+sample customers
+sample bookings
+sample inbound WhatsApp conversations
+
+Also create a demo conversation simulator inside the dashboard so I can test customer messages and see how AI responds, books, and schedules automations even before real WhatsApp is connected.
+
+13. UX Requirements
+
+The UI should feel like a real startup product, not a dev dashboard.
+
+Design goals
+mobile-first
+clean
+premium but simple
+beauty-business friendly
+minimal clutter
+strong dashboard usability
+
+Use shadcn/ui components consistently.
+Add loading states, empty states, toasts, validation, and clear form UX.
+
+14. Engineering Quality Requirements
+
+I care a lot about code quality. Please structure the code well.
+
+Must do:
+modular folder structure
+strong TypeScript typing
+reusable services
+clear separation of UI, business logic, AI orchestration, scheduling, and integrations
+avoid giant route files
+avoid hardcoded prompt strings scattered everywhere
+use config files/constants where appropriate
+write helper utilities and services cleanly
+add comments where architecture decisions matter
+add a README with setup instructions
+15. Folder / Architecture Expectations
+
+Use a clean structure similar to:
+
+/app
+/(auth)
+/(dashboard)
+/api/webhooks/whatsapp
+/api/cron/process-automations
+/components
+/lib
+/ai
+classifier.ts
+responder.ts
+prompts.ts
+types.ts
+/bookings
+availability.ts
+booking-service.ts
+/automations
+automation-service.ts
+scheduler.ts
+processors.ts
+/channels
+whatsapp.ts
+mock-whatsapp.ts
+types.ts
+/db
+/auth
+/utils
+/prisma
+schema.prisma
+
+You can improve this structure if needed, but keep the codebase clean.
+
+16. AI Prompting Implementation Requirement
+
+Do not just write one giant prompt.
+
+Create a proper AI layer with:
+
+system prompt templates
+business context injection
+structured JSON output parsing
+confidence-based routing
+intent classification + reply drafting
+safe fallback behavior
+
+Also include a function like:
+
+processInboundCustomerMessage(businessId, phone, messageText)
+
+That function should:
+
+find/create customer
+load business context
+call AI intent classifier
+decide whether to auto-reply or queue approval
+create/update booking if appropriate
+log action
+create automation events if booking confirmed
+17. MVP Success Criteria
+
+When I run the app, I should be able to:
+
+sign in as a beauty business owner
+onboard a business and add services
+open a demo AI inbox
+simulate a WhatsApp customer asking:
+price questions
+booking questions
+reschedule questions
+see PulseFlow draft or send responses
+see bookings created in the dashboard
+see reminder/review/repeat automation events scheduled
+approve uncertain AI messages
+mark bookings complete and trigger review/repeat workflows
+18. Deliverables I Want from You
+
+I want you to actually build the app, not just describe it.
+
+Please:
+
+scaffold the full codebase
+define the database schema
+implement the main pages and backend logic
+implement demo mode
+implement AI message processing flow
+implement booking + reminder + review + repeat reminder workflows
+create seed data
+add a README with:
+setup steps
+env variables
+how to run locally
+how to connect WhatsApp Cloud API later
+how to swap mock automation processing for real job infra later
+19. Build Order
+
+Please build in this order:
+
+project scaffolding + database schema + auth
+onboarding + services + business settings
+dashboard + customers + bookings CRUD
+demo inbox + AI orchestration + simulated inbound messages
+booking workflow engine + slot logic
+automation events engine
+review + repeat reminder flows
+WhatsApp webhook integration layer
+polish, seed data, and README
+20. Final Output Expectations
+
+Do not stop at pseudo-code.
+Generate the actual app structure and working code.
+
+If something external cannot fully run inside Replit (for example live WhatsApp webhooks or production queue infra), then:
+
+still implement the architecture and integration layer properly
+add mock mode / simulation mode
+document exactly how to switch to the live provider later
+
+Where tradeoffs are needed, optimize for:
+
+a real working MVP
+clean architecture
+future production readiness
+demoability for early users and investors
+
+Build PulseFlow now.
+
+
+---
+
+# What this prompt does well
+This version is strong because it tells Replit to build **like an actual founding engineer**, not like a toy app generator. It gives:
+
+## 1) Correct product framing
+It forces PulseFlow to be:
+- **AI WhatsApp front desk**
+- **beauty/wellness vertical**
+- **workflow product**
+- not “generic CRM”
+
+## 2) Proper production scope
+It explicitly asks for:
+- multi-tenant SaaS architecture
+- PostgreSQL + Prisma
+- auth
+- queues / automation abstraction
+- AI orchestration layer
+- webhook-ready WhatsApp integration
+- admin dashboard
+- schema design
+- seed/demo mode
+- clean folder structure
+- README + env setup
+
+## 3) Real workflow logic
+It includes the actual product engine:
+- inquiry → intent classification
+- service lookup
+- availability check
+- booking creation
+- reminder scheduling
+- review requests
+- repeat nudges
+- owner approval if AI is uncertain
+
+That is exactly what makes PulseFlow valuable.
+
+---
+
+# My recommendation: use a **2-step Replit workflow**
+Don’t paste only one prompt and hope the agent gets everything perfect in one shot. Use **this workflow**:
+
+---
+
+# Step 1 — Paste the big master prompt above
+Let Replit scaffold the full app.
+
+Then once it finishes, give a **second hardening prompt** like this:
+
+## Replit Follow-Up Prompt #2 — Hardening / Production Pass
+
+```txt
+Now do a second pass on the PulseFlow codebase and improve it like a senior engineer preparing for real pilot users.
+
+Focus on the following:
+
+1. Audit the entire architecture for weak spots, duplication, and fragile code.
+2. Refactor any overly large files into modular services.
+3. Ensure the Prisma schema, route handlers, and AI workflow logic are consistent.
+4. Add robust validation with Zod for all critical inputs.
+5. Improve error handling, loading states, and empty states across the dashboard.
+6. Add proper authorization checks so one business cannot access another business’s data.
+7. Add structured logging around:
+   - inbound customer messages
+   - AI classification results
+   - booking creation
+   - automation event scheduling
+   - outbound messages
+8. Make the automation engine cleaner and idempotent so duplicate reminders are not sent accidentally.
+9. Review the AI layer and add safer fallback behavior for low-confidence or ambiguous messages.
+10. Improve the demo inbox so I can simulate realistic customer conversations end-to-end.
+11. Improve the owner dashboard UX for bookings, approvals, and customer history.
+12. Add seed data for at least one strong demo beauty business.
+13. Add a polished README covering setup, architecture, env vars, demo mode, and WhatsApp integration steps.
+14. Add comments where architectural decisions matter.
+15. Make the app feel investor-demo ready and pilot-customer ready.
+
+Do not rewrite everything from scratch. Improve the current codebase carefully and keep it clean, production-minded, an
