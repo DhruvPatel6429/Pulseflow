@@ -6,17 +6,13 @@ import { eq, and } from "drizzle-orm";
 import {
   CreateServiceBody,
   UpdateServiceBody,
-  GetServiceParams,
-  DeleteServiceParams,
-  UpdateServiceParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
 
-router.get("/services", async (_req, res): Promise<void> => {
+router.get("/services", async (req, res): Promise<void> => {
   const services = await db.select().from(servicesTable)
-    .where(eq(servicesTable.businessId, DEFAULT_BUSINESS_ID));
+    .where(eq(servicesTable.businessId, req.businessId));
   res.json(services.map(s => ({ ...s, price: Number(s.price) })));
 });
 
@@ -30,7 +26,7 @@ router.post("/services", async (req, res): Promise<void> => {
   const [svc] = await db.insert(servicesTable).values({
     ...rest,
     price: String(price ?? 0),
-    businessId: DEFAULT_BUSINESS_ID,
+    businessId: req.businessId,
   }).returning();
   res.status(201).json({ ...svc, price: Number(svc.price) });
 });
@@ -39,7 +35,7 @@ router.get("/services/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [svc] = await db.select().from(servicesTable)
-    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, req.businessId)));
   if (!svc) {
     res.status(404).json({ error: "Service not found" });
     return;
@@ -59,7 +55,7 @@ router.patch("/services/:id", async (req, res): Promise<void> => {
   const updateData: Partial<typeof servicesTable.$inferInsert> = { ...rest };
   if (price !== undefined) updateData.price = String(price);
   const [svc] = await db.update(servicesTable).set(updateData)
-    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, req.businessId)))
     .returning();
   if (!svc) {
     res.status(404).json({ error: "Service not found" });
@@ -72,7 +68,7 @@ router.delete("/services/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   await db.delete(servicesTable)
-    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(servicesTable.id, id), eq(servicesTable.businessId, req.businessId)));
   res.status(204).send();
 });
 

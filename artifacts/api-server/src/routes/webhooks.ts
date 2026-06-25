@@ -1,29 +1,34 @@
+/**
+ * Webhooks — Meta WhatsApp Cloud API + Sandbox Simulator
+ *
+ * Public routes — no Clerk auth required.
+ * Business is identified by verifyToken (for webhook verification) or
+ * DEFAULT_BUSINESS_ID (for the sandbox demo endpoint).
+ */
+
 import { Router } from "express";
 import type { IRouter } from "express";
 import { db } from "@workspace/db";
-import {
-  customersTable, conversationsTable, messagesTable,
-  businessesTable, aiActionLogsTable,
-} from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { parseWebhookPayload, sendWhatsappMessage } from "../lib/whatsapp";
-import { processInboundMessage } from "../lib/ai-engine";
+import { businessesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { parseWebhookPayload } from "../lib/whatsapp";
+import { processInboundCustomerMessage } from "../lib/ai/process-inbound";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
 
-// Meta webhook verification
+// Meta webhook verification — GET
 router.get("/webhooks/whatsapp", async (req, res): Promise<void> => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  const [business] = await db.select().from(businessesTable)
-    .where(eq(businessesTable.id, DEFAULT_BUSINESS_ID));
+  // Find business by verifyToken (supports multi-tenant)
+  const businesses = await db.select().from(businessesTable);
+  const business = businesses.find((b) => b.whatsappVerifyToken && b.whatsappVerifyToken === token);
 
-  if (mode === "subscribe" && token === business?.whatsappVerifyToken) {
-    req.log.info("WhatsApp webhook verified");
+  if (mode === "subscribe" && business) {
+    req.log.info({ businessId: business.id }, "WhatsApp webhook verified");
     res.status(200).send(challenge);
     return;
   }
@@ -31,7 +36,7 @@ router.get("/webhooks/whatsapp", async (req, res): Promise<void> => {
   res.status(403).json({ error: "Forbidden" });
 });
 
-// Inbound WhatsApp messages
+// Inbound WhatsApp messages — POST
 router.post("/webhooks/whatsapp", async (req, res): Promise<void> => {
   // Acknowledge immediately (Meta requires 200 within 5s)
   res.status(200).json({ status: "ok" });
@@ -39,19 +44,35 @@ router.post("/webhooks/whatsapp", async (req, res): Promise<void> => {
   const normalized = parseWebhookPayload(req.body as Record<string, unknown>);
   if (!normalized) return;
 
+  // Look up business by phone number id from webhook payload
+  // For now, fall back to first onboarded business
+  const [business] = await db
+    .select({ id: businessesTable.id })
+    .from(businessesTable)
+    .where(eq(businessesTable.isOnboarded, true))
+    .limit(1);
+
+  if (!business) {
+    logger.warn("No onboarded business found for webhook");
+    return;
+  }
+
   try {
-    await handleInboundMessage(normalized.from, normalized.text, normalized.customerName);
+    await processInboundCustomerMessage(
+      business.id, normalized.from, normalized.text, normalized.customerName
+    );
   } catch (e) {
     logger.error({ e }, "Error processing inbound WhatsApp message");
   }
 });
 
-// Sandbox: simulate inbound WhatsApp message
+// Sandbox: simulate inbound WhatsApp message (protected by requireBusiness later if needed)
 router.post("/sandbox/send-message", async (req, res): Promise<void> => {
-  const { message, customerPhone, customerName } = req.body as {
+  const { message, customerPhone, customerName, businessId } = req.body as {
     message: string;
     customerPhone: string;
     customerName?: string;
+    businessId?: number;
   };
 
   if (!message || !customerPhone) {
@@ -59,106 +80,19 @@ router.post("/sandbox/send-message", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await processInboundMessage(DEFAULT_BUSINESS_ID, message, customerPhone, customerName);
+  // Default to first onboarded business for sandbox demo
+  let targetBusinessId = businessId;
+  if (!targetBusinessId) {
+    const [biz] = await db
+      .select({ id: businessesTable.id })
+      .from(businessesTable)
+      .where(eq(businessesTable.isOnboarded, true))
+      .limit(1);
+    targetBusinessId = biz?.id ?? 1;
+  }
 
-  // Store conversation and message
-  await handleInboundMessage(customerPhone, message, customerName);
-
+  const result = await processInboundCustomerMessage(targetBusinessId, customerPhone, message, customerName);
   res.json(result);
 });
-
-async function handleInboundMessage(phone: string, message: string, name?: string) {
-  // Get or create customer
-  let [customer] = await db.select().from(customersTable)
-    .where(and(eq(customersTable.businessId, DEFAULT_BUSINESS_ID), eq(customersTable.phone, phone)));
-
-  if (!customer) {
-    [customer] = await db.insert(customersTable).values({
-      businessId: DEFAULT_BUSINESS_ID,
-      name: name ?? "WhatsApp Customer",
-      phone,
-      source: "whatsapp",
-    }).returning();
-  }
-
-  // Get or create conversation
-  let [conversation] = await db.select().from(conversationsTable)
-    .where(and(
-      eq(conversationsTable.businessId, DEFAULT_BUSINESS_ID),
-      eq(conversationsTable.customerId, customer.id)
-    ));
-
-  if (!conversation) {
-    [conversation] = await db.insert(conversationsTable).values({
-      businessId: DEFAULT_BUSINESS_ID,
-      customerId: customer.id,
-      channel: "whatsapp",
-      status: "active",
-    }).returning();
-  }
-
-  // Store inbound message
-  await db.insert(messagesTable).values({
-    conversationId: conversation.id,
-    direction: "inbound",
-    content: message,
-    messageType: "text",
-    aiGenerated: false,
-    requiresApproval: false,
-    sentAt: new Date(),
-  });
-
-  // Update conversation last message time
-  await db.update(conversationsTable)
-    .set({ lastMessageAt: new Date() })
-    .where(eq(conversationsTable.id, conversation.id));
-
-  // Process with AI
-  const aiResult = await processInboundMessage(DEFAULT_BUSINESS_ID, message, phone, name);
-
-  // Log AI action
-  const [actionLog] = await db.insert(aiActionLogsTable).values({
-    businessId: DEFAULT_BUSINESS_ID,
-    customerId: customer.id,
-    conversationId: conversation.id,
-    actionType: aiResult.intent,
-    inputSummary: message,
-    outputSummary: aiResult.replyDraft,
-    replyDraft: aiResult.replyDraft,
-    confidenceScore: aiResult.confidence,
-    status: aiResult.confidence >= 0.8 ? "auto_sent" : "pending",
-    requiresHumanReview: aiResult.confidence < 0.8,
-  }).returning();
-
-  // Auto-reply or queue for approval
-  if (aiResult.confidence >= 0.8) {
-    // Store outbound message
-    await db.insert(messagesTable).values({
-      conversationId: conversation.id,
-      direction: "outbound",
-      content: aiResult.replyDraft,
-      messageType: "text",
-      aiGenerated: true,
-      requiresApproval: false,
-      sentAt: new Date(),
-    });
-
-    try {
-      await sendWhatsappMessage({ to: phone, text: aiResult.replyDraft });
-    } catch (e) {
-      logger.warn({ e }, "WhatsApp auto-reply failed");
-    }
-  } else {
-    // Queue message for approval
-    await db.insert(messagesTable).values({
-      conversationId: conversation.id,
-      direction: "outbound",
-      content: aiResult.replyDraft,
-      messageType: "text",
-      aiGenerated: true,
-      requiresApproval: true,
-    });
-  }
-}
 
 export default router;

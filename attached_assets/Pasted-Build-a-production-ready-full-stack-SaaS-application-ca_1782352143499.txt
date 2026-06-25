@@ -1,0 +1,921 @@
+Build a production-ready full-stack SaaS application called **PulseFlow**.
+
+PulseFlow is an **AI WhatsApp Front Desk for solo beauty & wellness businesses in India** (salons, home beauticians, makeup artists, nail artists, skincare/wellness studios). It is **not** a generic CRM. It is a vertical workflow automation product that turns WhatsApp conversations into bookings, reminders, review requests, and repeat-customer follow-ups.
+
+I want you to actually implement the app in code inside this Replit project. Do not give me only a product plan or architecture notes. Build the working codebase step by step.
+
+---
+
+# 1) Product Goal
+
+PulseFlow should help a solo beauty business owner:
+
+1. set up their business profile, services, working hours, pricing, policies, and review link
+2. receive customer WhatsApp inquiries
+3. let AI answer repetitive questions about services, pricing, availability, and location
+4. capture booking intent from customer chats
+5. convert booking requests into structured appointments
+6. send booking confirmations
+7. send 24h and 2h reminders automatically
+8. send post-service review requests automatically
+9. send repeat-visit nudges after a configurable interval
+10. allow owner review/approval for uncertain AI actions
+11. manage everything from a clean mobile-first dashboard
+
+---
+
+# 2) Build Quality Standard
+
+This must be built like a **production-minded SaaS**, not a hackathon toy.
+
+## Non-negotiable requirements:
+- modular architecture
+- clean TypeScript
+- strong typing
+- multi-tenant data separation
+- idempotent automation engine
+- production-safe API structure
+- proper validation
+- clean dashboard UX
+- demo data and demo inbox for testing
+- integration-ready WhatsApp webhook architecture
+- README and env setup instructions
+
+---
+
+# 3) Tech Stack
+
+Use this stack unless there is a strong reason to improve it while keeping the app deployable in Replit:
+
+- **Frontend:** Next.js 14+ with TypeScript + App Router
+- **UI:** Tailwind CSS + shadcn/ui
+- **Database:** PostgreSQL
+- **ORM:** Drizzle ORM
+- **Auth:** NextAuth or Clerk (choose the simpler production-grade option for Replit)
+- **Validation:** Zod
+- **Forms:** React Hook Form where needed
+- **AI Layer:** OpenAI API abstraction layer with structured output parsing
+- **State:** keep simple; use server actions / route handlers and local component state where appropriate
+- **Scheduling / jobs:** build an internal automation event system that works in dev/demo mode and can later be swapped with cron/pg-boss/BullMQ/Trigger.dev
+- **WhatsApp integration:** architect around Meta WhatsApp Cloud API webhook + send-message abstraction, with mock/demo mode first
+- **Logging:** structured server logs for automation and AI actions
+
+If something cannot be fully live inside Replit, still implement the architecture properly and include a mock/sandbox mode plus clear setup instructions for production.
+
+---
+
+# 4) Product Positioning Rules
+
+PulseFlow is **not** “another CRM”. It must feel like an **AI receptionist / front desk for beauty businesses**.
+
+Use terminology and workflows specific to beauty & wellness:
+- services like haircut, hair spa, bridal makeup, facial, waxing, threading, nail extensions
+- appointment slots and service durations
+- reschedule / cancellation
+- post-service review requests
+- repeat-visit nudges
+- owner approval for uncertain premium or bridal inquiries
+
+---
+
+# 5) Core App Modules to Build
+
+Implement the following modules in this order, but keep the whole architecture coherent:
+
+1. auth + multi-tenant business accounts
+2. business onboarding
+3. services setup
+4. customers + bookings data models and CRUD
+5. owner dashboard
+6. AI inbox / conversation simulator
+7. booking workflow engine
+8. automation engine
+9. demo seed system
+10. automation runner API
+11. WhatsApp integration-ready webhook architecture
+12. final polish + README
+
+---
+
+# 6) Multi-Tenant Architecture
+
+Each business account must have isolated data.
+
+Each business should own:
+- profile/settings
+- services
+- customers
+- bookings
+- conversations/messages
+- AI actions
+- automation events
+- templates/settings
+
+No data leakage across businesses.
+
+---
+
+# 7) Business Onboarding Flow
+
+Create a polished onboarding flow for a salon/beauty owner.
+
+Collect:
+- business name
+- owner name
+- phone
+- WhatsApp number
+- city
+- address
+- Google Maps link
+- category (salon, bridal makeup, home salon, nail studio, skincare, wellness)
+- business description
+- working days and opening/closing hours
+- cancellation policy
+- token / advance payment policy (store now even if payment integration comes later)
+- Google review link
+- preferred AI tone (friendly / premium / warm / concise)
+
+Then collect service setup for each service:
+- service name
+- category
+- price
+- durationMinutes
+- description
+- requiresConsultation
+- requiresTokenAdvance
+- repeatReminderDays
+
+The onboarding data should feed the business knowledge base used by the AI responder.
+
+---
+
+# 8) Database Schema
+
+Design a clean Drizzle schema for at least the following tables. You may add more if needed.
+
+## users
+- id
+- name
+- email
+- role
+- businessId
+- createdAt
+- updatedAt
+
+## businesses
+- id
+- name
+- ownerName
+- phone
+- whatsappNumber
+- city
+- address
+- googleMapsLink
+- category
+- description
+- timezone
+- workingHours (JSON)
+- cancellationPolicy
+- tokenPolicy
+- preferredTone
+- googleReviewLink
+- createdAt
+- updatedAt
+
+## services
+- id
+- businessId
+- name
+- category
+- price
+- durationMinutes
+- description
+- requiresConsultation
+- requiresTokenAdvance
+- repeatReminderDays
+- isActive
+- createdAt
+- updatedAt
+
+## customers
+- id
+- businessId
+- name
+- phone
+- notes
+- source
+- lastVisitAt
+- createdAt
+- updatedAt
+
+## bookings
+- id
+- businessId
+- customerId
+- serviceId
+- bookingDate
+- startTime
+- endTime
+- status (pending, confirmed, completed, cancelled, no_show, rescheduled)
+- source (whatsapp, manual, dashboard)
+- notes
+- createdByAI boolean
+- reminder24hSent boolean
+- reminder2hSent boolean
+- reviewRequestSent boolean
+- repeatReminderScheduledAt nullable
+- createdAt
+- updatedAt
+
+## conversations
+- id
+- businessId
+- customerId
+- channel
+- status
+- lastMessageAt
+- createdAt
+- updatedAt
+
+## messages
+- id
+- conversationId
+- direction (inbound/outbound)
+- content
+- messageType
+- providerMessageId
+- aiGenerated boolean
+- requiresApproval boolean
+- sentAt
+- createdAt
+
+## ai_actions
+- id
+- businessId
+- customerId nullable
+- bookingId nullable
+- actionType
+- inputSummary
+- outputSummary
+- confidenceScore
+- status
+- requiresHumanReview boolean
+- metadata JSON
+- createdAt
+
+## review_requests
+- id
+- businessId
+- customerId
+- bookingId
+- status
+- sentAt
+- createdAt
+
+## automation_events
+This is critical. Build this carefully.
+
+Fields:
+- id
+- businessId
+- customerId nullable
+- bookingId nullable
+- type (booking_confirmation, reminder_24h, reminder_2h, review_request, repeat_visit_nudge)
+- scheduledFor
+- status (pending, processing, sent, failed, skipped)
+- payload JSON
+- idempotencyKey UNIQUE
+- attemptCount default 0
+- lastAttemptAt nullable
+- error nullable
+- sentAt nullable
+- createdAt
+- updatedAt
+
+Add all necessary indexes and foreign keys.
+
+---
+
+# 9) App Routes / Pages
+
+Build a polished dashboard with these pages:
+
+## /dashboard
+Overview page with:
+- today’s bookings
+- upcoming bookings
+- pending AI reviews
+- pending automation jobs count
+- recent conversations
+- booking breakdown panel
+- top services panel
+- “Run Automations” button
+- “Load Demo” banner if account has no data
+
+## /dashboard/bookings
+- bookings list
+- filter by date/status/service
+- create booking manually
+- confirm / cancel / reschedule
+- mark completed
+- mark no-show
+
+## /dashboard/customers
+- customer list
+- visit history
+- notes
+- upcoming booking
+- last visit
+- repeat reminder eligibility
+
+## /dashboard/services
+- CRUD service catalog
+
+## /dashboard/inbox
+- AI inbox / conversations
+- conversation list
+- messages thread
+- pending AI review cards
+- approve / edit / reject drafted AI responses
+- simulated inbound message box for demo mode
+
+## /dashboard/automations
+- automation settings panel
+- AI confidence threshold slider
+- reminder settings
+- review request settings
+- repeat nudge settings
+- right sidebar with:
+  - live pending jobs list
+  - recent automation activity
+  - “Run Automations” button
+  - last run stats
+
+## /dashboard/settings
+- business profile
+- working hours
+- review link
+- WhatsApp settings placeholder/integration config
+- AI tone and automation preferences
+
+---
+
+# 10) AI Layer
+
+Build a clean AI orchestration layer for inbound customer messages.
+
+Create a proper AI module structure, not one giant prompt:
+- /lib/ai/types.ts
+- /lib/ai/prompts.ts
+- /lib/ai/classifier.ts
+- /lib/ai/responder.ts
+- /lib/ai/process-inbound.ts
+
+The AI must classify customer messages into intents such as:
+- price_inquiry
+- availability_inquiry
+- booking_request
+- reschedule_request
+- cancel_request
+- location_inquiry
+- faq
+- unknown
+
+The AI should use business-specific context:
+- services
+- prices
+- durations
+- working hours
+- location
+- cancellation policy
+- business tone
+- FAQs
+
+The AI should return a structured object like:
+
+type AIIntentResult = {
+  intent:
+    | "price_inquiry"
+    | "availability_inquiry"
+    | "booking_request"
+    | "reschedule_request"
+    | "cancel_request"
+    | "location_inquiry"
+    | "faq"
+    | "unknown";
+  confidence: number;
+  extractedEntities: {
+    serviceName?: string;
+    requestedDate?: string;
+    requestedTime?: string;
+    customerName?: string;
+  };
+  actionSuggestion: {
+    shouldReply: boolean;
+    shouldCreatePendingBooking: boolean;
+    shouldAskFollowUpQuestion: boolean;
+    shouldEscalateToOwner: boolean;
+  };
+  replyDraft: string;
+};
+
+## AI rules:
+- never hallucinate price or policy data not present in business records
+- if uncertain, ask a clarifying question or queue for owner approval
+- bridal/premium/ambiguous cases should often require approval
+- high-confidence repetitive questions can auto-reply
+- log AI decisions in ai_actions
+
+Create a main function:
+`processInboundCustomerMessage(businessId, phone, messageText)`
+
+It should:
+1. find or create customer
+2. find or create conversation
+3. store inbound message
+4. load business context
+5. call AI classifier/responder
+6. decide whether to auto-send or queue approval
+7. create/update booking if appropriate
+8. log AI action
+9. return a structured result for UI and future WhatsApp integration
+
+---
+
+# 11) Booking Workflow Engine
+
+Build real booking logic, not fake placeholders.
+
+Create:
+- /lib/bookings/availability.ts
+- /lib/bookings/booking-service.ts
+
+The booking engine should:
+- generate available slots based on business working hours, service duration, and existing bookings
+- prevent overlaps
+- support booking creation, confirmation, reschedule, cancel, completion, no-show
+- support AI-assisted booking creation from chat intent
+
+Example flow:
+Customer says:
+“Hi, what’s the price for haircut and do you have slot tomorrow evening?”
+
+The system should:
+1. detect service inquiry + booking intent
+2. find the haircut service
+3. check tomorrow evening availability
+4. draft reply like:
+   “Haircut is ₹350. We have slots tomorrow at 5:30 PM and 7:00 PM. Which would you prefer?”
+5. when customer confirms, create booking
+6. trigger booking automations
+
+---
+
+# 12) Automation Engine (Very Important)
+
+Build a clean, modular, idempotent automation engine.
+
+Create folder:
+- /lib/automations/
+
+Required files:
+- automation-service.ts
+- automation-types.ts
+- automation-registry.ts
+- template-service.ts or use /lib/templates/message-templates.ts
+
+Implement these core functions:
+
+## createAutomationEvent()
+Creates a scheduled automation event in automation_events.
+
+Requirements:
+- generate a deterministic idempotencyKey
+- if same event already exists, do not create duplicate
+- return existing event if duplicate found
+
+## scheduleBookingAutomations(booking)
+Triggered when booking is confirmed.
+Should create:
+- booking_confirmation (immediate)
+- reminder_24h
+- reminder_2h
+
+Must be idempotent and avoid duplicates.
+
+## scheduleCompletionAutomations(booking)
+Triggered when booking is completed.
+Should create:
+- review_request
+- repeat_visit_nudge
+
+Use service.repeatReminderDays for repeat reminder scheduling.
+
+## processDueAutomationEvents(now = new Date())
+This is the job runner heart.
+It should:
+1. fetch all pending automation events with scheduledFor <= now
+2. process each safely
+3. mark status processing -> sent/failed/skipped
+4. increment attemptCount
+5. save lastAttemptAt
+6. never send duplicates
+7. return summary:
+   { processed, sent, failed, skipped }
+
+## Automation event types:
+- booking_confirmation
+- reminder_24h
+- reminder_2h
+- review_request
+- repeat_visit_nudge
+
+## Message templates
+Support variables:
+- {name}
+- {service}
+- {date}
+- {time}
+- {business}
+- {review_link}
+
+Create default templates for:
+- booking confirmation
+- 24h reminder
+- 2h reminder
+- review request
+- repeat visit nudge
+
+Use a clean template rendering helper.
+
+---
+
+# 13) Automation Registry
+
+Avoid giant if/else chains.
+
+Create a registry mapping automation event types to handlers:
+
+booking_confirmation -> sendBookingConfirmation
+reminder_24h -> send24hReminder
+reminder_2h -> send2hReminder
+review_request -> sendReviewRequest
+repeat_visit_nudge -> sendRepeatVisitReminder
+
+Each handler should:
+- load required business/customer/booking/service data
+- render message template
+- send through mock WhatsApp sender for now
+- update sent flags / review_requests if relevant
+- return a structured result
+
+---
+
+# 14) Mock Messaging Layer + WhatsApp Architecture
+
+Create a messaging abstraction layer so the system can later swap to real WhatsApp Cloud API.
+
+Suggested structure:
+- /lib/channels/types.ts
+- /lib/channels/mock-whatsapp.ts
+- /lib/channels/whatsapp.ts
+- /app/api/webhooks/whatsapp/route.ts
+
+For now implement:
+- mock outbound sender used by automations and AI replies
+- mock inbound simulator for demo mode
+
+But architect it so later it can support:
+- Meta webhook verification
+- inbound message parsing
+- outbound sends to WhatsApp Cloud API
+
+Do not hardcode everything directly into route handlers.
+
+---
+
+# 15) Demo Seed System
+
+Create `POST /api/seed/demo`
+
+This route should:
+- create a demo business from scratch if none exists
+- OR wipe and re-seed the demo business cleanly if it already exists
+
+Create this demo business:
+
+## Business
+- GlowNest Studio
+- Owner: Kavya Reddy
+- Location: Indiranagar, Bangalore
+
+## Services (8)
+1. Haircut
+2. Hair Spa
+3. Bridal Makeup
+4. Facial
+5. D-Tan
+6. Nail Extensions
+7. Threading
+8. Waxing
+
+Each service should include realistic:
+- price
+- duration
+- repeatReminderDays
+- description
+
+## Customers (7)
+Use realistic names such as:
+- Sneha
+- Meera
+- Ananya
+- Priya
+- Riya
+- Aditi
+- Nisha
+
+Add visit history and notes.
+
+## Bookings (12)
+Create bookings across:
+- yesterday
+- today
+- tomorrow
+- next week
+
+Use mixed statuses:
+- confirmed
+- completed
+- cancelled
+- no_show
+- rescheduled
+
+## Conversations (5)
+Create 5 realistic WhatsApp-style conversation threads.
+
+Include realistic examples like:
+- Sneha bridal inquiry
+- Meera reschedule request
+- haircut price + slot inquiry
+- facial follow-up
+- repeat booking request
+
+## Pending AI actions (2)
+Create two pre-loaded pending AI reviews:
+1. Sneha bridal inquiry at 61% confidence
+2. Meera reschedule case at 72% confidence
+
+These should appear in dashboard and inbox pending review UI.
+
+The seed route should also create the correct automation events for seeded bookings where relevant.
+
+---
+
+# 16) Automation Runner API
+
+Create:
+`POST /api/cron/process-automations`
+
+This endpoint should:
+- call processDueAutomationEvents()
+- process all due automation events
+- return summary JSON:
+  {
+    processed,
+    sent,
+    failed,
+    skipped
+  }
+
+This endpoint should be safe to call repeatedly without duplicate sends because the automation engine must be idempotent.
+
+Also wire this into the dashboard UI and automations page:
+- “Run Automations” button in dashboard header
+- “Run Automations” button / job runner panel on automations page
+
+Show:
+- live pending job count
+- recent activity
+- last run results
+
+---
+
+# 17) Dashboard UX Requirements
+
+Make the dashboard feel like a real startup SaaS product, not a raw admin panel.
+
+## Required UX features:
+- responsive/mobile-friendly layout
+- clean stat cards
+- loading states
+- empty states
+- toasts
+- nice cards and tables using shadcn/ui
+
+## Dashboard details:
+### Overview cards:
+- Today’s bookings
+- Upcoming bookings
+- Pending AI Reviews (clickable)
+- Pending Automations
+
+### Panels:
+- booking breakdown
+- top services
+- recent conversations
+- recent automation activity
+
+### AI review UX:
+Allow quick approve / edit / reject of pending AI actions from dashboard and inbox.
+
+### Empty state:
+If account has no meaningful data, show a “Load Demo Data” CTA/banner.
+
+---
+
+# 18) Automations Page UX
+
+Redesign automations page with two sections:
+
+## Main area:
+- automation settings form
+- reminder timings
+- review request timing
+- repeat reminder settings
+- AI confidence threshold slider
+
+## Right sidebar:
+- Job Runner card
+- pending jobs list
+- recent automation activity feed
+- button to run automations now
+
+This page should feel like an operations console for the business owner.
+
+---
+
+# 19) API Endpoints to Build
+
+Build clean route handlers or server actions for at least:
+
+- POST /api/seed/demo
+- POST /api/cron/process-automations
+- GET/POST/PATCH endpoints or server actions for services, customers, bookings, settings as needed
+- booking completion action must trigger scheduleCompletionAutomations()
+- booking confirmation flow must trigger scheduleBookingAutomations()
+- AI approval action endpoints
+- simulated inbound message endpoint for demo inbox if useful
+
+---
+
+# 20) Bug / Consistency Requirements
+
+Make sure the codebase uses the new automation engine consistently.
+
+Do not leave old reminder scheduling logic around.
+
+Specifically:
+- replace any older reminder scheduling helpers with the new automation service
+- booking completion must trigger scheduleCompletionAutomations()
+- booking confirmation must trigger scheduleBookingAutomations()
+- avoid broken Drizzle subquery patterns or unsafe aggregate hacks in bookings POST
+- keep counts and dashboard stats clean and query-safe
+
+---
+
+# 21) Suggested Folder Structure
+
+Use a clean structure similar to this:
+
+/app
+  /(auth)
+  /(dashboard)
+    /dashboard
+    /dashboard/bookings
+    /dashboard/customers
+    /dashboard/services
+    /dashboard/inbox
+    /dashboard/automations
+    /dashboard/settings
+  /api/seed/demo
+  /api/cron/process-automations
+  /api/webhooks/whatsapp
+
+/components
+  /dashboard
+  /bookings
+  /customers
+  /services
+  /inbox
+  /automations
+  /ui
+
+/lib
+  /ai
+    types.ts
+    prompts.ts
+    classifier.ts
+    responder.ts
+    process-inbound.ts
+  /automations
+    automation-service.ts
+    automation-types.ts
+    automation-registry.ts
+  /bookings
+    availability.ts
+    booking-service.ts
+  /channels
+    types.ts
+    mock-whatsapp.ts
+    whatsapp.ts
+  /db
+  /templates
+    message-templates.ts
+  /auth
+  /utils
+
+/drizzle
+/drizzle/schema.ts
+
+If you need to improve this structure, do so, but keep it clean and modular.
+
+---
+
+# 22) Seeded Demo Scenarios
+
+The demo should be immediately impressive and testable.
+
+I should be able to:
+1. log in
+2. load demo data
+3. open inbox
+4. inspect seeded conversations
+5. see 2 pending AI approvals
+6. confirm/complete bookings
+7. run automations
+8. see reminder/review/repeat events process
+9. simulate a new inbound customer message
+10. watch PulseFlow classify, draft reply, and optionally create booking flow
+
+---
+
+# 23) README Requirements
+
+Create a proper README with:
+- project overview
+- stack
+- env variables
+- how to run locally in Replit
+- how demo seed works
+- how automation runner works
+- how mock WhatsApp works
+- where to plug in real WhatsApp Cloud API later
+- architecture overview of AI layer, booking engine, and automation engine
+
+Also create `.env.example`.
+
+---
+
+# 24) Implementation Expectations
+
+Do not stop at pseudocode.
+Do not only describe what should be built.
+Actually scaffold and implement the app.
+
+Build in a logical order:
+1. schema + auth + base layout
+2. onboarding + services
+3. customers + bookings
+4. dashboard
+5. demo seed
+6. AI inbox simulator
+7. automation engine
+8. job runner
+9. polish and README
+
+As you build:
+- keep code coherent
+- keep types strong
+- avoid duplication
+- keep business logic in services/lib, not scattered in UI files
+
+---
+
+# 25) Final Success Criteria
+
+When this project is done, I should be able to:
+
+- sign in as a beauty business owner
+- onboard or load demo business
+- manage services, customers, and bookings
+- simulate customer WhatsApp messages
+- see AI classify and draft replies
+- create/confirm bookings
+- trigger booking confirmation and reminders
+- mark bookings completed and trigger review + repeat automations
+- review pending AI actions
+- run due automation jobs from the dashboard
+- inspect a clean production-minded codebase ready for later live WhatsApp integration
+
+Build PulseFlow now.

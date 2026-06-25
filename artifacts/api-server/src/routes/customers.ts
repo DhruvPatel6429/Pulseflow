@@ -9,45 +9,34 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
 
 router.get("/customers", async (req, res): Promise<void> => {
+  const biz = req.businessId;
   const search = req.query.search as string | undefined;
   const page = parseInt((req.query.page as string) ?? "1", 10);
   const limit = parseInt((req.query.limit as string) ?? "20", 10);
   const offset = (page - 1) * limit;
 
-  let query = db.select().from(customersTable)
-    .where(eq(customersTable.businessId, DEFAULT_BUSINESS_ID));
-
-  let total = 0;
   let customers;
+  let total = 0;
 
   if (search) {
     customers = await db.select().from(customersTable)
-      .where(and(
-        eq(customersTable.businessId, DEFAULT_BUSINESS_ID),
-        ilike(customersTable.name, `%${search}%`)
-      ))
+      .where(and(eq(customersTable.businessId, biz), ilike(customersTable.name, `%${search}%`)))
       .orderBy(desc(customersTable.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [countRow] = await db.select({ count: sql<number>`count(*)` }).from(customersTable)
-      .where(and(
-        eq(customersTable.businessId, DEFAULT_BUSINESS_ID),
-        ilike(customersTable.name, `%${search}%`)
-      ));
+      .limit(limit).offset(offset);
+    const [countRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(customersTable)
+      .where(and(eq(customersTable.businessId, biz), ilike(customersTable.name, `%${search}%`)));
     total = Number(countRow?.count ?? 0);
   } else {
     customers = await db.select().from(customersTable)
-      .where(eq(customersTable.businessId, DEFAULT_BUSINESS_ID))
+      .where(eq(customersTable.businessId, biz))
       .orderBy(desc(customersTable.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [countRow] = await db.select({ count: sql<number>`count(*)` }).from(customersTable)
-      .where(eq(customersTable.businessId, DEFAULT_BUSINESS_ID));
+      .limit(limit).offset(offset);
+    const [countRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(customersTable)
+      .where(eq(customersTable.businessId, biz));
     total = Number(countRow?.count ?? 0);
   }
 
@@ -62,7 +51,7 @@ router.post("/customers", async (req, res): Promise<void> => {
   }
   const [customer] = await db.insert(customersTable).values({
     ...parsed.data,
-    businessId: DEFAULT_BUSINESS_ID,
+    businessId: req.businessId,
   }).returning();
   res.status(201).json(customer);
 });
@@ -70,20 +59,19 @@ router.post("/customers", async (req, res): Promise<void> => {
 router.get("/customers/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
+  const biz = req.businessId;
 
   const [customer] = await db.select().from(customersTable)
-    .where(and(eq(customersTable.id, id), eq(customersTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(customersTable.id, id), eq(customersTable.businessId, biz)));
   if (!customer) {
     res.status(404).json({ error: "Customer not found" });
     return;
   }
 
-  const bookings = await db.select({
-    booking: bookingsTable,
-    service: servicesTable,
-  }).from(bookingsTable)
+  const bookings = await db.select({ booking: bookingsTable, service: servicesTable })
+    .from(bookingsTable)
     .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
-    .where(and(eq(bookingsTable.customerId, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.customerId, id), eq(bookingsTable.businessId, biz)))
     .orderBy(desc(bookingsTable.bookingDate));
 
   const mappedBookings = bookings.map(({ booking, service }) => ({
@@ -107,8 +95,9 @@ router.patch("/customers/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [customer] = await db.update(customersTable).set(parsed.data as Partial<typeof customersTable.$inferInsert>)
-    .where(and(eq(customersTable.id, id), eq(customersTable.businessId, DEFAULT_BUSINESS_ID)))
+  const [customer] = await db.update(customersTable)
+    .set(parsed.data as Partial<typeof customersTable.$inferInsert>)
+    .where(and(eq(customersTable.id, id), eq(customersTable.businessId, req.businessId)))
     .returning();
   if (!customer) {
     res.status(404).json({ error: "Customer not found" });

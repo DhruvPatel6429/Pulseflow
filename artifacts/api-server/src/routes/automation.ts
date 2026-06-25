@@ -6,15 +6,13 @@ import { eq } from "drizzle-orm";
 import { UpdateAutomationBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
-
-router.get("/automation", async (_req, res): Promise<void> => {
+router.get("/automation", async (req, res): Promise<void> => {
   let [settings] = await db.select().from(automationSettingsTable)
-    .where(eq(automationSettingsTable.businessId, DEFAULT_BUSINESS_ID));
+    .where(eq(automationSettingsTable.businessId, req.businessId));
 
   if (!settings) {
     const [created] = await db.insert(automationSettingsTable)
-      .values({ businessId: DEFAULT_BUSINESS_ID })
+      .values({ businessId: req.businessId })
       .returning();
     settings = created;
   }
@@ -30,18 +28,18 @@ router.patch("/automation", async (req, res): Promise<void> => {
   }
 
   let [settings] = await db.select().from(automationSettingsTable)
-    .where(eq(automationSettingsTable.businessId, DEFAULT_BUSINESS_ID));
+    .where(eq(automationSettingsTable.businessId, req.businessId));
 
   if (!settings) {
     const [created] = await db.insert(automationSettingsTable)
-      .values({ businessId: DEFAULT_BUSINESS_ID })
+      .values({ businessId: req.businessId })
       .returning();
     settings = created;
   }
 
   const [updated] = await db.update(automationSettingsTable)
     .set(parsed.data as Partial<typeof automationSettingsTable.$inferInsert>)
-    .where(eq(automationSettingsTable.businessId, DEFAULT_BUSINESS_ID))
+    .where(eq(automationSettingsTable.businessId, req.businessId))
     .returning();
 
   res.json(updated);

@@ -14,8 +14,6 @@ import { scheduleBookingAutomations, scheduleCompletionAutomations } from "../li
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
-
 function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
   const total = h * 60 + m + minutes;
@@ -46,14 +44,14 @@ router.get("/bookings/available-slots", async (req, res): Promise<void> => {
     res.status(400).json({ error: "date and serviceId are required" });
     return;
   }
-  const slots = await getAvailableSlots(DEFAULT_BUSINESS_ID, serviceId, date);
+  const slots = await getAvailableSlots(req.businessId, serviceId, date);
   res.json({ date, serviceId, slots });
 });
 
 router.get("/bookings", async (req, res): Promise<void> => {
   const { date, status, serviceId, customerId, from, to } = req.query;
   let rows = await db.select().from(bookingsTable)
-    .where(eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID))
+    .where(eq(bookingsTable.businessId, req.businessId))
     .orderBy(desc(bookingsTable.bookingDate));
 
   if (date) rows = rows.filter((b) => b.bookingDate === date);
@@ -82,7 +80,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
   }
 
   const endTime = addMinutes(data.startTime, service.durationMinutes);
-  const conflict = await checkConflict(DEFAULT_BUSINESS_ID, data.bookingDate, data.startTime, endTime);
+  const conflict = await checkConflict(req.businessId, data.bookingDate, data.startTime, endTime);
   if (conflict) {
     res.status(409).json({ error: "Slot is already booked" });
     return;
@@ -92,12 +90,12 @@ router.post("/bookings", async (req, res): Promise<void> => {
   let customerId = data.customerId ?? null;
   if (!customerId && data.customerPhone) {
     const [existingCustomer] = await db.select().from(customersTable)
-      .where(and(eq(customersTable.businessId, DEFAULT_BUSINESS_ID), eq(customersTable.phone, data.customerPhone)));
+      .where(and(eq(customersTable.businessId, req.businessId), eq(customersTable.phone, data.customerPhone)));
     if (existingCustomer) {
       customerId = existingCustomer.id;
     } else {
       const [newCustomer] = await db.insert(customersTable).values({
-        businessId: DEFAULT_BUSINESS_ID,
+        businessId: req.businessId,
         name: data.customerName ?? "Guest",
         phone: data.customerPhone,
         source: "whatsapp",
@@ -107,7 +105,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
   }
 
   const [booking] = await db.insert(bookingsTable).values({
-    businessId: DEFAULT_BUSINESS_ID,
+    businessId: req.businessId,
     customerId,
     serviceId: data.serviceId,
     bookingDate: data.bookingDate,
@@ -132,7 +130,7 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [booking] = await db.select().from(bookingsTable)
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)));
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
     return;
@@ -149,7 +147,7 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     return;
   }
   const [booking] = await db.update(bookingsTable).set(parsed.data as Partial<typeof bookingsTable.$inferInsert>)
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
@@ -162,7 +160,7 @@ router.post("/bookings/:id/confirm", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [booking] = await db.update(bookingsTable).set({ status: "confirmed" })
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
@@ -175,7 +173,7 @@ router.post("/bookings/:id/cancel", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [booking] = await db.update(bookingsTable).set({ status: "cancelled" })
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
@@ -194,7 +192,7 @@ router.post("/bookings/:id/complete", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   const [booking] = await db.update(bookingsTable)
     .set({ status: "completed" })
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
@@ -222,7 +220,7 @@ router.post("/bookings/:id/no-show", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [booking] = await db.update(bookingsTable).set({ status: "no_show" })
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
   if (!booking) {
     res.status(404).json({ error: "Booking not found" });
@@ -242,7 +240,7 @@ router.post("/bookings/:id/reschedule", async (req, res): Promise<void> => {
   const { bookingDate, startTime, notes } = parsed.data;
 
   const [existing] = await db.select().from(bookingsTable)
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)));
   if (!existing) {
     res.status(404).json({ error: "Booking not found" });
     return;
@@ -251,7 +249,7 @@ router.post("/bookings/:id/reschedule", async (req, res): Promise<void> => {
   const [service] = await db.select().from(servicesTable).where(eq(servicesTable.id, existing.serviceId));
   const endTime = addMinutes(startTime, service?.durationMinutes ?? 30);
 
-  const conflict = await checkConflict(DEFAULT_BUSINESS_ID, bookingDate, startTime, endTime, id);
+  const conflict = await checkConflict(req.businessId, bookingDate, startTime, endTime, id);
   if (conflict) {
     res.status(409).json({ error: "Slot is already booked" });
     return;

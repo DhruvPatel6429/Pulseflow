@@ -7,12 +7,10 @@ import { SendMessageBody } from "@workspace/api-zod";
 import { sendWhatsappMessage } from "../lib/whatsapp";
 
 const router: IRouter = Router();
-const DEFAULT_BUSINESS_ID = 1;
-
 router.get("/conversations", async (req, res): Promise<void> => {
   const { status, limit = "20" } = req.query;
   let rows = await db.select().from(conversationsTable)
-    .where(eq(conversationsTable.businessId, DEFAULT_BUSINESS_ID))
+    .where(eq(conversationsTable.businessId, req.businessId))
     .orderBy(desc(conversationsTable.lastMessageAt))
     .limit(parseInt(limit as string, 10));
 
@@ -39,7 +37,7 @@ router.get("/conversations/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
 
   const [conv] = await db.select().from(conversationsTable)
-    .where(and(eq(conversationsTable.id, id), eq(conversationsTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(conversationsTable.id, id), eq(conversationsTable.businessId, req.businessId)));
   if (!conv) {
     res.status(404).json({ error: "Conversation not found" });
     return;
@@ -66,7 +64,7 @@ router.post("/conversations/:id/send", async (req, res): Promise<void> => {
   }
 
   const [conv] = await db.select().from(conversationsTable)
-    .where(and(eq(conversationsTable.id, id), eq(conversationsTable.businessId, DEFAULT_BUSINESS_ID)));
+    .where(and(eq(conversationsTable.id, id), eq(conversationsTable.businessId, req.businessId)));
   if (!conv) {
     res.status(404).json({ error: "Conversation not found" });
     return;

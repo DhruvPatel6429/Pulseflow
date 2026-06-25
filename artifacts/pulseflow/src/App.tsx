@@ -1,5 +1,13 @@
+import { useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ClerkProvider,
+  Show,
+  useClerk,
+} from "@clerk/react";
+import { publishableKeyFromHost } from "@clerk/react/internal";
+import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "@/components/layout/AppLayout";
@@ -12,18 +20,75 @@ import Inbox from "@/pages/inbox";
 import Automations from "@/pages/automations";
 import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
+import SignInPage from "@/pages/sign-in";
+import SignUpPage from "@/pages/sign-up";
 import NotFound from "@/pages/not-found";
 import { apiFetch } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// REQUIRED — resolves publishable key from hostname (supports custom domains)
+const clerkPubKey = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+
+// REQUIRED — empty in dev (Clerk hits dev FAPI directly), auto-set in prod
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function stripBase(path: string): string {
+  return basePath && path.startsWith(basePath)
+    ? path.slice(basePath.length) || "/"
+    : path;
+}
+
+if (!clerkPubKey) {
+  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY — check your environment secrets");
+}
+
+const clerkAppearance = {
+  baseTheme: shadcn,
+  cssLayerName: "clerk",
+  variables: {
+    colorPrimary: "hsl(340, 45%, 45%)",
+    colorForeground: "hsl(340, 40%, 15%)",
+    colorMutedForeground: "hsl(340, 20%, 45%)",
+    colorDanger: "hsl(0, 84%, 60%)",
+    colorBackground: "hsl(340, 10%, 98%)",
+    colorInput: "hsl(340, 15%, 85%)",
+    colorInputForeground: "hsl(340, 40%, 15%)",
+    colorNeutral: "hsl(340, 15%, 85%)",
+    fontFamily: "inherit",
+    borderRadius: "0.5rem",
+  },
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 5000,
-    },
+    queries: { retry: 1, staleTime: 5000 },
   },
 });
+
+/** Clears TanStack Query cache when the signed-in user changes */
+function ClerkCacheInvalidator() {
+  const { addListener } = useClerk();
+  const qc = useQueryClient();
+  const prevRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const unsub = addListener(({ user }) => {
+      const uid = user?.id ?? null;
+      if (prevRef.current !== undefined && prevRef.current !== uid) {
+        qc.clear();
+      }
+      prevRef.current = uid;
+    });
+    return unsub;
+  }, [addListener, qc]);
+
+  return null;
+}
 
 function AppGuard() {
   const [location] = useLocation();
@@ -47,12 +112,10 @@ function AppGuard() {
     );
   }
 
-  // Not onboarded → always show onboarding
   if (!business?.isOnboarded && location !== "/onboarding") {
     return <Onboarding />;
   }
 
-  // Onboarding complete → wrap with app layout
   return (
     <AppLayout>
       <Switch>
@@ -71,16 +134,53 @@ function AppGuard() {
   );
 }
 
+function AppRoutes() {
+  const [, setLocation] = useLocation();
+
+  return (
+    <ClerkProvider
+      publishableKey={clerkPubKey}
+      proxyUrl={clerkProxyUrl}
+      appearance={clerkAppearance}
+      signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
+      localization={{
+        signIn: { start: { title: "Welcome back to PulseFlow", subtitle: "Sign in to manage your salon" } },
+        signUp: { start: { title: "Join PulseFlow", subtitle: "AI front desk for beauty & wellness" } },
+      }}
+      routerPush={(to) => setLocation(stripBase(to))}
+      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
+    >
+      <QueryClientProvider client={queryClient}>
+        <ClerkCacheInvalidator />
+        <TooltipProvider>
+          <Switch>
+            {/* Auth pages — accessible when signed out */}
+            <Route path="/sign-in/*?" component={SignInPage} />
+            <Route path="/sign-up/*?" component={SignUpPage} />
+
+            {/* Protected app — require sign-in */}
+            <Route>
+              <Show when="signed-in">
+                <AppGuard />
+              </Show>
+              <Show when="signed-out">
+                <RedirectToSignInPage />
+              </Show>
+            </Route>
+          </Switch>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ClerkProvider>
+  );
+}
+
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppGuard />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <WouterRouter base={basePath}>
+      <AppRoutes />
+    </WouterRouter>
   );
 }
 
