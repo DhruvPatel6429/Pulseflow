@@ -87,7 +87,7 @@ router.post("/conversations/:id/send", async (req, res): Promise<void> => {
   // Update conversation last message time
   await db.update(conversationsTable)
     .set({ lastMessageAt: new Date() })
-    .where(eq(conversationsTable.id, id));
+    .where(and(eq(conversationsTable.id, id), eq(conversationsTable.businessId, req.businessId)));
 
   // Try to send via WhatsApp
   if (customer?.phone) {

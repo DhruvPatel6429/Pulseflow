@@ -5,6 +5,7 @@ import {
   ClerkProvider,
   Show,
   useClerk,
+  RedirectToSignIn,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
@@ -27,10 +28,13 @@ import { apiFetch } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // REQUIRED — resolves publishable key from hostname (supports custom domains)
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
+const clerkPubKey =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+    : publishableKeyFromHost(
+        window.location.hostname,
+        import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+      );
 
 // REQUIRED — empty in dev (Clerk hits dev FAPI directly), auto-set in prod
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
@@ -165,7 +169,7 @@ function AppRoutes() {
                 <AppGuard />
               </Show>
               <Show when="signed-out">
-                <RedirectToSignInPage />
+                <RedirectToSignIn />
               </Show>
             </Route>
           </Switch>

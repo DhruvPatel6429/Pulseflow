@@ -6,6 +6,7 @@
 
 import { Router } from "express";
 import type { IRouter } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import {
   businessesTable,
@@ -24,29 +25,61 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-router.post("/seed/demo", async (_req, res): Promise<void> => {
-  logger.info("Seeding GlowNest Studio demo data...");
+router.post("/seed/demo", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  let businessId = 1;
+
+  if (userId) {
+    const existingBiz = await db
+      .select({ id: businessesTable.id })
+      .from(businessesTable)
+      .where(eq(businessesTable.clerkUserId, userId))
+      .limit(1);
+
+    if (existingBiz.length > 0) {
+      businessId = existingBiz[0].id;
+    } else {
+      // Create new business for this user
+      const [newBiz] = await db
+        .insert(businessesTable)
+        .values({
+          clerkUserId: userId,
+          name: "GlowNest Studio",
+          ownerName: "Kavya Reddy",
+          phone: "+91 98400 12345",
+          whatsappNumber: "+91 98400 12345",
+          city: "Bangalore",
+          address: "17, Indiranagar 12th Main, Bangalore – 560038",
+          category: "beauty_parlour",
+          isOnboarded: true,
+        })
+        .returning();
+      businessId = newBiz.id;
+    }
+  }
+
+  logger.info({ businessId }, "Seeding GlowNest Studio demo data...");
 
   // Clear existing data for clean re-seed
   const existing = await db
     .select({ id: businessesTable.id })
     .from(businessesTable)
-    .where(eq(businessesTable.id, 1))
+    .where(eq(businessesTable.id, businessId))
     .limit(1);
 
   if (existing.length > 0) {
     // Wipe old relational data before re-seeding
-    await db.delete(aiActionLogsTable).where(eq(aiActionLogsTable.businessId, 1));
-    await db.delete(reminderJobsTable).where(eq(reminderJobsTable.businessId, 1));
-    const convs = await db.select({ id: conversationsTable.id }).from(conversationsTable).where(eq(conversationsTable.businessId, 1));
+    await db.delete(aiActionLogsTable).where(eq(aiActionLogsTable.businessId, businessId));
+    await db.delete(reminderJobsTable).where(eq(reminderJobsTable.businessId, businessId));
+    const convs = await db.select({ id: conversationsTable.id }).from(conversationsTable).where(eq(conversationsTable.businessId, businessId));
     for (const c of convs) {
       await db.delete(messagesTable).where(eq(messagesTable.conversationId, c.id));
     }
-    await db.delete(conversationsTable).where(eq(conversationsTable.businessId, 1));
-    await db.delete(bookingsTable).where(eq(bookingsTable.businessId, 1));
-    await db.delete(customersTable).where(eq(customersTable.businessId, 1));
-    await db.delete(servicesTable).where(eq(servicesTable.businessId, 1));
-    await db.delete(automationSettingsTable).where(eq(automationSettingsTable.businessId, 1));
+    await db.delete(conversationsTable).where(eq(conversationsTable.businessId, businessId));
+    await db.delete(bookingsTable).where(eq(bookingsTable.businessId, businessId));
+    await db.delete(customersTable).where(eq(customersTable.businessId, businessId));
+    await db.delete(servicesTable).where(eq(servicesTable.businessId, businessId));
+    await db.delete(automationSettingsTable).where(eq(automationSettingsTable.businessId, businessId));
   }
 
   // ─── Business ────────────────────────────────────────────────────────────
@@ -63,40 +96,41 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
       description: "Premium beauty studio specialising in hair, skin, and bridal makeup.",
       reviewLink: "https://g.page/r/glownest-demo-review",
       isOnboarded: true,
-    }).where(eq(businessesTable.id, 1));
+    }).where(eq(businessesTable.id, businessId));
   } else {
     await db.insert(businessesTable).values({
-      id: 1,
-    name: "GlowNest Studio",
-    ownerName: "Kavya Reddy",
-    phone: "+91 98400 12345",
-    whatsappNumber: "+91 98400 12345",
-    city: "Bangalore",
-    address: "17, Indiranagar 12th Main, Bangalore – 560038",
-    googleMapsLink: "https://maps.google.com/?q=GlowNest+Studio+Indiranagar+Bangalore",
-    category: "beauty_parlour",
-    description: "Premium beauty studio specialising in hair, skin, and bridal makeup. Walk-in welcome, appointments preferred.",
-    timezone: "Asia/Kolkata",
-    workingHours: {
-      mon: { open: "10:00", close: "20:00", isOpen: true },
-      tue: { open: "10:00", close: "20:00", isOpen: true },
-      wed: { open: "10:00", close: "20:00", isOpen: true },
-      thu: { open: "10:00", close: "20:00", isOpen: true },
-      fri: { open: "10:00", close: "20:30", isOpen: true },
-      sat: { open: "09:00", close: "21:00", isOpen: true },
-      sun: { open: "10:00", close: "19:00", isOpen: true },
-    },
-    cancellationPolicy: "Please cancel at least 2 hours before your appointment. No-show bookings may incur a ₹100 token fee.",
-    tokenPolicy: "A ₹200 advance is required for bridal packages.",
-    preferredTone: "friendly",
-    reviewLink: "https://g.page/r/glownest-demo-review",
-    isOnboarded: true,
-  });
+      id: businessId,
+      clerkUserId: userId ?? null,
+      name: "GlowNest Studio",
+      ownerName: "Kavya Reddy",
+      phone: "+91 98400 12345",
+      whatsappNumber: "+91 98400 12345",
+      city: "Bangalore",
+      address: "17, Indiranagar 12th Main, Bangalore – 560038",
+      googleMapsLink: "https://maps.google.com/?q=GlowNest+Studio+Indiranagar+Bangalore",
+      category: "beauty_parlour",
+      description: "Premium beauty studio specialising in hair, skin, and bridal makeup. Walk-in welcome, appointments preferred.",
+      timezone: "Asia/Kolkata",
+      workingHours: {
+        mon: { open: "10:00", close: "20:00", isOpen: true },
+        tue: { open: "10:00", close: "20:00", isOpen: true },
+        wed: { open: "10:00", close: "20:00", isOpen: true },
+        thu: { open: "10:00", close: "20:00", isOpen: true },
+        fri: { open: "10:00", close: "20:30", isOpen: true },
+        sat: { open: "09:00", close: "21:00", isOpen: true },
+        sun: { open: "10:00", close: "19:00", isOpen: true },
+      },
+      cancellationPolicy: "Please cancel at least 2 hours before your appointment. No-show bookings may incur a ₹100 token fee.",
+      tokenPolicy: "A ₹200 advance is required for bridal packages.",
+      preferredTone: "friendly",
+      reviewLink: "https://g.page/r/glownest-demo-review",
+      isOnboarded: true,
+    });
   }
 
   // Default automation settings
   await db.insert(automationSettingsTable).values({
-    businessId: 1,
+    businessId: businessId,
     reminder24hEnabled: true,
     reminder2hEnabled: true,
     reviewRequestEnabled: true,
@@ -106,7 +140,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
     aiConfidenceThreshold: 0.78,
     reminderTemplate: "Hi {name}! 💫 Reminder: your {service} is tomorrow at {time} at GlowNest Studio. Can't wait to see you! 🌸",
     reviewTemplate: "Hi {name}! Hope you loved your {service} at GlowNest! 💅 If you have a moment, a Google review means the world to us 🙏 {review_link}",
-  });
+  }).onConflictDoNothing();
 
   // ─── Services ────────────────────────────────────────────────────────────
   const servicesData = [
@@ -124,7 +158,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
     .insert(servicesTable)
     .values(
       servicesData.map((s) => ({
-        businessId: 1,
+        businessId: businessId,
         isActive: true,
         requiresConsultation: false,
         requiresTokenAdvance: false,
@@ -148,7 +182,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
 
   const insertedCustomers = await db
     .insert(customersTable)
-    .values(customersData.map((c) => ({ ...c, businessId: 1, source: "whatsapp", lastVisitAt: new Date() })))
+    .values(customersData.map((c) => ({ ...c, businessId: businessId, source: "whatsapp", lastVisitAt: new Date() })))
     .returning();
 
   const custMap = Object.fromEntries(insertedCustomers.map((c) => [c.phone, c]));
@@ -189,7 +223,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
     const [booking] = await db
       .insert(bookingsTable)
       .values({
-        businessId: 1,
+        businessId: businessId,
         customerId: customer.id,
         serviceId: service.id,
         bookingDate: b.date,
@@ -264,7 +298,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
     const [conversation] = await db
       .insert(conversationsTable)
       .values({
-        businessId: 1,
+        businessId: businessId,
         customerId: customer.id,
         channel: "whatsapp",
         status: "active",
@@ -289,7 +323,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
   const sneha = custMap["+91 99001 22003"];
   if (sneha) {
     await db.insert(aiActionLogsTable).values({
-      businessId: 1,
+      businessId: businessId,
       customerId: sneha.id,
       actionType: "booking_request",
       inputSummary: "I want bridal makeup for my wedding on December 15th. Can I also get a trial before?",
@@ -303,7 +337,7 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
     const meera = custMap["+91 99001 22006"];
     if (meera) {
       await db.insert(aiActionLogsTable).values({
-        businessId: 1,
+        businessId: businessId,
         customerId: meera.id,
         actionType: "reschedule_request",
         inputSummary: "Can I move my cleanup to the weekend instead?",
@@ -332,21 +366,35 @@ router.post("/seed/demo", async (_req, res): Promise<void> => {
 });
 
 // DELETE — reset demo (for re-seeding)
-router.delete("/seed/demo", async (_req, res): Promise<void> => {
-  // Delete in FK order
-  await db.delete(aiActionLogsTable).where(eq(aiActionLogsTable.businessId, 1));
-  await db.delete(reminderJobsTable).where(eq(reminderJobsTable.businessId, 1));
+router.delete("/seed/demo", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  let businessId = 1;
 
-  const convs = await db.select({ id: conversationsTable.id }).from(conversationsTable).where(eq(conversationsTable.businessId, 1));
+  if (userId) {
+    const existingBiz = await db
+      .select({ id: businessesTable.id })
+      .from(businessesTable)
+      .where(eq(businessesTable.clerkUserId, userId))
+      .limit(1);
+    if (existingBiz.length > 0) {
+      businessId = existingBiz[0].id;
+    }
+  }
+
+  // Delete in FK order
+  await db.delete(aiActionLogsTable).where(eq(aiActionLogsTable.businessId, businessId));
+  await db.delete(reminderJobsTable).where(eq(reminderJobsTable.businessId, businessId));
+
+  const convs = await db.select({ id: conversationsTable.id }).from(conversationsTable).where(eq(conversationsTable.businessId, businessId));
   for (const c of convs) {
     await db.delete(messagesTable).where(eq(messagesTable.conversationId, c.id));
   }
-  await db.delete(conversationsTable).where(eq(conversationsTable.businessId, 1));
-  await db.delete(bookingsTable).where(eq(bookingsTable.businessId, 1));
-  await db.delete(customersTable).where(eq(customersTable.businessId, 1));
-  await db.delete(servicesTable).where(eq(servicesTable.businessId, 1));
-  await db.delete(automationSettingsTable).where(eq(automationSettingsTable.businessId, 1));
-  await db.delete(businessesTable).where(eq(businessesTable.id, 1));
+  await db.delete(conversationsTable).where(eq(conversationsTable.businessId, businessId));
+  await db.delete(bookingsTable).where(eq(bookingsTable.businessId, businessId));
+  await db.delete(customersTable).where(eq(customersTable.businessId, businessId));
+  await db.delete(servicesTable).where(eq(servicesTable.businessId, businessId));
+  await db.delete(automationSettingsTable).where(eq(automationSettingsTable.businessId, businessId));
+  await db.delete(businessesTable).where(eq(businessesTable.id, businessId));
 
   res.json({ ok: true, message: "Demo data cleared. You can re-seed now." });
 });

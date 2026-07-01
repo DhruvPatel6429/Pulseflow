@@ -49,7 +49,7 @@ router.post("/jobs/:id/trigger", async (req, res): Promise<void> => {
   }
   const [updated] = await db.update(reminderJobsTable)
     .set({ status: "sent", sentAt: new Date() })
-    .where(eq(reminderJobsTable.id, id))
+    .where(and(eq(reminderJobsTable.id, id), eq(reminderJobsTable.businessId, req.businessId)))
     .returning();
   res.json(await enrichJob(updated));
 });

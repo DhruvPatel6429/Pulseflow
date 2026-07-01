@@ -36,12 +36,30 @@ router.get("/webhooks/whatsapp", async (req, res): Promise<void> => {
   res.status(403).json({ error: "Forbidden" });
 });
 
-// Inbound WhatsApp messages — POST
+// Inbound WhatsApp messages & status callbacks — POST
 router.post("/webhooks/whatsapp", async (req, res): Promise<void> => {
   // Acknowledge immediately (Meta requires 200 within 5s)
   res.status(200).json({ status: "ok" });
 
-  const normalized = parseWebhookPayload(req.body as Record<string, unknown>);
+  const body = req.body as Record<string, any>;
+  const entry = body.entry?.[0];
+  const changes = entry?.changes?.[0];
+  const value = changes?.value;
+
+  // Process message delivery status updates
+  if (value?.statuses) {
+    for (const status of value.statuses) {
+      const messageId = status.id;
+      const statusType = status.status; // delivered, read, failed, sent
+      logger.info({ messageId, statusType }, "WhatsApp delivery status callback received");
+      if (statusType === "failed" && status.errors) {
+        logger.error({ messageId, errors: status.errors }, "WhatsApp message delivery failed");
+      }
+    }
+    return;
+  }
+
+  const normalized = parseWebhookPayload(body);
   if (!normalized) return;
 
   // Look up business by phone number id from webhook payload

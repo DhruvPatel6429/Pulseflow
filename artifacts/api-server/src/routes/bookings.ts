@@ -73,7 +73,11 @@ router.post("/bookings", async (req, res): Promise<void> => {
   }
   const data = parsed.data;
 
-  const [service] = await db.select().from(servicesTable).where(eq(servicesTable.id, data.serviceId));
+  // Multi-tenant check for service
+  const [service] = await db
+    .select()
+    .from(servicesTable)
+    .where(and(eq(servicesTable.id, data.serviceId), eq(servicesTable.businessId, req.businessId)));
   if (!service) {
     res.status(400).json({ error: "Service not found" });
     return;
@@ -86,36 +90,48 @@ router.post("/bookings", async (req, res): Promise<void> => {
     return;
   }
 
-  // Create customer if not provided
-  let customerId = data.customerId ?? null;
-  if (!customerId && data.customerPhone) {
-    const [existingCustomer] = await db.select().from(customersTable)
-      .where(and(eq(customersTable.businessId, req.businessId), eq(customersTable.phone, data.customerPhone)));
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-    } else {
-      const [newCustomer] = await db.insert(customersTable).values({
-        businessId: req.businessId,
-        name: data.customerName ?? "Guest",
-        phone: data.customerPhone,
-        source: "whatsapp",
-      }).returning();
-      customerId = newCustomer.id;
+  // Wrap mutations in a transaction
+  const booking = await db.transaction(async (tx) => {
+    let customerId = data.customerId ?? null;
+    if (!customerId && data.customerPhone) {
+      const [existingCustomer] = await tx
+        .select()
+        .from(customersTable)
+        .where(and(eq(customersTable.businessId, req.businessId), eq(customersTable.phone, data.customerPhone)));
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+      } else {
+        const [newCustomer] = await tx
+          .insert(customersTable)
+          .values({
+            businessId: req.businessId,
+            name: data.customerName ?? "Guest",
+            phone: data.customerPhone,
+            source: "whatsapp",
+          })
+          .returning();
+        customerId = newCustomer.id;
+      }
     }
-  }
 
-  const [booking] = await db.insert(bookingsTable).values({
-    businessId: req.businessId,
-    customerId,
-    serviceId: data.serviceId,
-    bookingDate: data.bookingDate,
-    startTime: data.startTime,
-    endTime,
-    status: "pending",
-    source: (data.source as "whatsapp" | "manual" | "dashboard") ?? "manual",
-    notes: data.notes ?? null,
-    createdByAI: false,
-  }).returning();
+    const [newBooking] = await tx
+      .insert(bookingsTable)
+      .values({
+        businessId: req.businessId,
+        customerId,
+        serviceId: data.serviceId,
+        bookingDate: data.bookingDate,
+        startTime: data.startTime,
+        endTime,
+        status: "pending",
+        source: (data.source as "whatsapp" | "manual" | "dashboard") ?? "manual",
+        notes: data.notes ?? null,
+        createdByAI: false,
+      })
+      .returning();
+
+    return newBooking;
+  });
 
   // Schedule automation events (confirmation, 24h reminder, 2h reminder)
   await scheduleBookingAutomations(booking.id).catch((e) =>
@@ -182,7 +198,13 @@ router.post("/bookings/:id/cancel", async (req, res): Promise<void> => {
   // Cancel pending jobs
   await db.update(reminderJobsTable)
     .set({ status: "cancelled" })
-    .where(and(eq(reminderJobsTable.bookingId, id), eq(reminderJobsTable.status, "pending")));
+    .where(
+      and(
+        eq(reminderJobsTable.bookingId, id),
+        eq(reminderJobsTable.businessId, req.businessId),
+        eq(reminderJobsTable.status, "pending")
+      )
+    );
 
   res.json(await enrichBooking(booking));
 });
@@ -190,30 +212,54 @@ router.post("/bookings/:id/cancel", async (req, res): Promise<void> => {
 router.post("/bookings/:id/complete", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const [booking] = await db.update(bookingsTable)
-    .set({ status: "completed" })
-    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
-    .returning();
-  if (!booking) {
+
+  const updatedBooking = await db.transaction(async (tx) => {
+    const [booking] = await tx
+      .update(bookingsTable)
+      .set({ status: "completed" })
+      .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
+      .returning();
+
+    if (!booking) {
+      return null;
+    }
+
+    // Update customer last visit and visit count
+    if (booking.customerId) {
+      const completedBookings = await tx
+        .select({ id: bookingsTable.id })
+        .from(bookingsTable)
+        .where(
+          and(
+            eq(bookingsTable.customerId, booking.customerId),
+            eq(bookingsTable.businessId, req.businessId),
+            eq(bookingsTable.status, "completed")
+          )
+        );
+
+      await tx
+        .update(customersTable)
+        .set({
+          lastVisitAt: new Date(),
+          totalVisits: completedBookings.length,
+        })
+        .where(and(eq(customersTable.id, booking.customerId), eq(customersTable.businessId, req.businessId)));
+    }
+
+    return booking;
+  });
+
+  if (!updatedBooking) {
     res.status(404).json({ error: "Booking not found" });
     return;
   }
-  // Update customer last visit and visit count
-  if (booking.customerId) {
-    const completedBookings = await db
-      .select({ id: bookingsTable.id })
-      .from(bookingsTable)
-      .where(and(eq(bookingsTable.customerId, booking.customerId), eq(bookingsTable.status, "completed")));
-    await db.update(customersTable).set({
-      lastVisitAt: new Date(),
-      totalVisits: completedBookings.length,
-    }).where(eq(customersTable.id, booking.customerId));
-  }
+
   // Schedule review request + repeat reminder
-  await scheduleCompletionAutomations(booking.id).catch((e) =>
-    logger.error({ bookingId: booking.id, e }, "Failed to schedule completion automations")
+  await scheduleCompletionAutomations(updatedBooking.id).catch((e) =>
+    logger.error({ bookingId: updatedBooking.id, e }, "Failed to schedule completion automations")
   );
-  res.json(await enrichBooking(booking));
+
+  res.json(await enrichBooking(updatedBooking));
 });
 
 router.post("/bookings/:id/no-show", async (req, res): Promise<void> => {
@@ -246,7 +292,12 @@ router.post("/bookings/:id/reschedule", async (req, res): Promise<void> => {
     return;
   }
 
-  const [service] = await db.select().from(servicesTable).where(eq(servicesTable.id, existing.serviceId));
+  // Enforce businessId check on service lookup
+  const [service] = await db
+    .select()
+    .from(servicesTable)
+    .where(and(eq(servicesTable.id, existing.serviceId), eq(servicesTable.businessId, req.businessId)));
+
   const endTime = addMinutes(startTime, service?.durationMinutes ?? 30);
 
   const conflict = await checkConflict(req.businessId, bookingDate, startTime, endTime, id);
@@ -255,9 +306,10 @@ router.post("/bookings/:id/reschedule", async (req, res): Promise<void> => {
     return;
   }
 
+  // Enforce businessId on the reschedule update
   const [booking] = await db.update(bookingsTable)
     .set({ bookingDate, startTime, endTime, status: "rescheduled", notes: notes ?? existing.notes })
-    .where(eq(bookingsTable.id, id))
+    .where(and(eq(bookingsTable.id, id), eq(bookingsTable.businessId, req.businessId)))
     .returning();
 
   res.json(await enrichBooking(booking));

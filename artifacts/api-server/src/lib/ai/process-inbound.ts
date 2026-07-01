@@ -16,7 +16,7 @@ import {
   conversationsTable, messagesTable, aiActionLogsTable,
   bookingsTable, automationSettingsTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { classifyIntent } from "./classifier";
 import { buildReply } from "./responder";
 import type { AIIntentResult, BusinessContext, ServiceContext } from "./types";
@@ -148,8 +148,30 @@ export async function processInboundCustomerMessage(
   };
 
   // ── 7. Classify + build reply ────────────────────────────────────────────
+  const lastMessages = await db
+    .select({ direction: messagesTable.direction, content: messagesTable.content })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, conversation.id))
+    .orderBy(desc(messagesTable.sentAt))
+    .limit(10);
+  const history = lastMessages.reverse();
+
   const classification = classifyIntent(messageText);
-  const intentResult = await buildReply({ classification, message: messageText, business: businessCtx, services, threshold });
+  const intentResult = await buildReply({
+    classification,
+    message: messageText,
+    business: businessCtx,
+    services,
+    threshold,
+    history,
+    customer: {
+      name: customer.name,
+      phone: customer.phone,
+      notes: customer.notes,
+      totalVisits: customer.totalVisits || 0,
+      lastVisitAt: customer.lastVisitAt,
+    },
+  });
 
   logger.info(
     { businessId, customerId: customer.id, intent: intentResult.intent, confidence: intentResult.confidence },

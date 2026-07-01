@@ -30,6 +30,8 @@ export interface OutboundMessage {
   text: string;
 }
 
+import { sendWhatsappMessage as sendWhatsappMessageChannel } from "./channels/whatsapp";
+
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const SANDBOX_MODE = !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID;
@@ -70,32 +72,8 @@ export function parseWebhookPayload(body: Record<string, unknown>): NormalizedIn
  * In sandbox mode, logs the message instead.
  */
 export async function sendWhatsappMessage(msg: OutboundMessage): Promise<void> {
-  if (SANDBOX_MODE) {
-    logger.info({ to: msg.to, text: msg.text }, "[SANDBOX] WhatsApp message would be sent");
-    return;
+  const result = await sendWhatsappMessageChannel(msg);
+  if (!result.ok) {
+    throw new Error(result.error || "WhatsApp send failed");
   }
-
-  const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: msg.to,
-      type: "text",
-      text: { body: msg.text },
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    logger.error({ status: response.status, err }, "WhatsApp send failed");
-    throw new Error(`WhatsApp send failed: ${err}`);
-  }
-
-  logger.info({ to: msg.to }, "WhatsApp message sent");
 }

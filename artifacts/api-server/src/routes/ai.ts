@@ -73,7 +73,7 @@ router.post("/ai/actions/:id/approve", async (req, res): Promise<void> => {
 
   const [updated] = await db.update(aiActionLogsTable)
     .set({ status: "approved", replyDraft: replyToSend ?? action.replyDraft })
-    .where(eq(aiActionLogsTable.id, id))
+    .where(and(eq(aiActionLogsTable.id, id), eq(aiActionLogsTable.businessId, req.businessId)))
     .returning();
 
   res.json(await enrichAction(updated));

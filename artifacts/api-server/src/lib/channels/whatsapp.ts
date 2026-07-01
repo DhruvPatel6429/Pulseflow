@@ -33,18 +33,43 @@ export async function sendWhatsappMessage(msg: OutboundMessage): Promise<Message
       text: { body: msg.text },
     };
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    let attempts = 0;
+    const maxAttempts = 3;
+    let delay = 1000;
+    let resp: Response | null = null;
 
-    if (!resp.ok) {
-      const errText = await resp.text();
-      logger.error({ status: resp.status, err: errText, to: msg.to }, "WhatsApp send failed");
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (resp.ok) break;
+
+        // Retry only on rate-limiting (429) or transient server errors (5xx)
+        if (resp.status !== 429 && resp.status < 500) {
+          break;
+        }
+      } catch (err) {
+        if (attempts >= maxAttempts) throw err;
+      }
+
+      if (attempts < maxAttempts) {
+        logger.warn({ to: msg.to, attempt: attempts, status: resp?.status }, "Retrying WhatsApp message send...");
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+
+    if (!resp || !resp.ok) {
+      const errText = resp ? await resp.text() : "Network Error";
+      logger.error({ status: resp?.status, err: errText, to: msg.to }, "WhatsApp send failed after retries");
       return { ok: false, error: errText };
     }
 

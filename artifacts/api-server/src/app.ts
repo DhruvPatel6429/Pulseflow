@@ -10,12 +10,23 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { globalErrorHandler } from "./middlewares/errorMiddleware";
+import {
+  requestIdMiddleware,
+  securityHeadersMiddleware,
+  timeoutMiddleware,
+} from "./middlewares/securityAndMonitoring";
 
 const app: Express = express();
+
+app.use(requestIdMiddleware);
+app.use(securityHeadersMiddleware);
+app.use(timeoutMiddleware(15)); // 15-second request timeout limit
 
 app.use(
   pinoHttp({
     logger,
+    genReqId: (req) => req.id,
     serializers: {
       req(req) {
         return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
@@ -46,5 +57,8 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Global Error Handler
+app.use(globalErrorHandler as express.ErrorRequestHandler);
 
 export default app;
