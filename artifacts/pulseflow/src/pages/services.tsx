@@ -76,16 +76,19 @@ export default function Services() {
     if (!form.name) return;
     setSaving(true);
     try {
+      const cleanForm = Object.fromEntries(
+        Object.entries(form).filter(([, v]) => v !== null)
+      );
       if (editingId !== null) {
         await apiFetch(`/services/${editingId}`, {
           method: "PATCH",
-          body: JSON.stringify(form),
+          body: JSON.stringify(cleanForm),
         });
         toast({ description: "Service updated" });
       } else {
         await apiFetch("/services", {
           method: "POST",
-          body: JSON.stringify({ ...form, businessId: 1 }),
+          body: JSON.stringify(cleanForm),
         });
         toast({ description: "Service created" });
       }

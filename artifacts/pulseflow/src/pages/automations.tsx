@@ -116,7 +116,7 @@ export default function Automations() {
     setSaving(true);
     try {
       await apiFetch("/automation", {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(local),
       });
       qc.invalidateQueries({ queryKey: ["automation"] });

@@ -84,9 +84,12 @@ export default function Settings() {
 
     setSaving(true);
     try {
+      const payload = Object.fromEntries(
+        Object.entries({ ...form, workingHours: hours }).filter(([, v]) => v !== null)
+      );
       await apiFetch("/business", {
         method: "PATCH",
-        body: JSON.stringify({ ...form, workingHours: hours }),
+        body: JSON.stringify(payload),
       });
       qc.invalidateQueries({ queryKey: ["business"] });
       toast({ description: "Settings saved successfully!" });
