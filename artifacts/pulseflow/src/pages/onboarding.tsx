@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Store, Phone, MapPin, Clock, Bot, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiFetch } from "@/lib/api";
+import { ApiFetchError, apiFetch, isMissingBusinessResponse } from "@/lib/api";
 
 const CATEGORIES = ["salon", "spa", "beauty_parlour", "barbershop", "nail_studio", "tattoo", "wellness", "other"];
 const STEPS = ["Business", "Contact", "Hours", "AI Settings", "Done"];
@@ -27,11 +28,22 @@ const DEFAULT_HOURS = {
   sun: { open: "10:00", close: "20:00", isOpen: false },
 };
 
+interface Business {
+  id: number;
+  preferredTone?: string | null;
+  reviewLink?: string | null;
+  cancellationPolicy?: string | null;
+  isOnboarded?: boolean;
+}
+
 export default function Onboarding() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [businessId, setBusinessId] = useState<number | null>(null);
+  const [setupComplete, setSetupComplete] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -49,39 +61,154 @@ export default function Onboarding() {
     workingHours: DEFAULT_HOURS,
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBusiness() {
+      try {
+        const res = await apiFetch<Business | null>("/business");
+        console.log("business API response:", res);
+        if (cancelled) return;
+
+        setBusinessId(res?.id ?? null);
+        console.log("business state:", res?.id ?? null);
+
+        if (res) {
+          setForm((current) => ({
+            ...current,
+            preferredTone: res.preferredTone ?? current.preferredTone,
+            reviewLink: res.reviewLink ?? current.reviewLink,
+            cancellationPolicy: res.cancellationPolicy ?? current.cancellationPolicy,
+          }));
+        }
+      } catch (err) {
+        if (isMissingBusinessResponse(err)) {
+          console.log("business API response:", null);
+          if (!cancelled) {
+            setBusinessId(null);
+            console.log("business state:", null);
+          }
+          return;
+        }
+        console.error("Business API error:", err);
+      }
+    }
+
+    loadBusiness();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function set(k: string, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  async function submit() {
+  const defaultServices = [
+    { name: "Haircut", category: "hair", price: 300, durationMinutes: 45, isActive: true },
+    { name: "Facial", category: "skin", price: 800, durationMinutes: 60, isActive: true },
+    { name: "Manicure", category: "nails", price: 400, durationMinutes: 45, isActive: true },
+  ];
+
+  async function seedStarterServices() {
+    for (const svc of defaultServices) {
+      await apiFetch("/services", {
+        method: "POST",
+        body: JSON.stringify({ ...svc, requiresConsultation: false, requiresTokenAdvance: false }),
+      }).catch(() => {});
+    }
+  }
+
+  async function createBusinessRecord() {
+    if (businessId) {
+      console.log("business state:", businessId);
+      setStep(3);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      // Create the business — returns the new record with its real DB id
-      await apiFetch("/business", {
+      const created = await apiFetch<Business | null>("/business", {
         method: "POST",
-        body: JSON.stringify({ ...form, isOnboarded: true }),
+        body: JSON.stringify({ ...form, isOnboarded: false }),
+      }).catch(async (err) => {
+        if (err instanceof ApiFetchError && err.status === 409) {
+          return apiFetch<Business | null>("/business").catch((getErr) => {
+            if (isMissingBusinessResponse(getErr)) return null;
+            throw getErr;
+          });
+        }
+        throw err;
       });
 
-      // Seed starter services. The server resolves businessId from the Clerk
-      // session via requireBusiness middleware — no need to pass it in the body.
-      const defaultServices = [
-        { name: "Haircut", category: "hair", price: 300, durationMinutes: 45, isActive: true },
-        { name: "Facial", category: "skin", price: 800, durationMinutes: 60, isActive: true },
-        { name: "Manicure", category: "nails", price: 400, durationMinutes: 45, isActive: true },
-      ];
-      for (const svc of defaultServices) {
-        await apiFetch("/services", {
-          method: "POST",
-          body: JSON.stringify({ ...svc, requiresConsultation: false, requiresTokenAdvance: false }),
-        }).catch(() => {});
+      console.log("business API response:", created);
+      const nextBusinessId = created?.id ?? null;
+      setBusinessId(nextBusinessId);
+      console.log("business state:", nextBusinessId);
+
+      if (!nextBusinessId) {
+        return;
       }
-      setStep(4);
+
+      await seedStarterServices();
+      await queryClient.invalidateQueries({ queryKey: ["business"] });
+      setStep(3);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submitAiSettings() {
+    console.log("business state:", businessId);
+
+    if (!businessId) {
+      setStep(4);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch<Business | null>("/business", {
+        method: "PATCH",
+        body: JSON.stringify({
+          preferredTone: form.preferredTone,
+          reviewLink: form.reviewLink,
+          cancellationPolicy: form.cancellationPolicy,
+          isOnboarded: true,
+        }),
+      });
+      console.log("business API response:", res);
+      setBusinessId(res?.id ?? businessId);
+      console.log("business state:", res?.id ?? businessId);
+      setSetupComplete(true);
+      setStep(4);
+    } catch (e: unknown) {
+      if (isMissingBusinessResponse(e)) {
+        setBusinessId(null);
+        console.log("business API response:", null);
+        console.log("business state:", null);
+        setStep(4);
+        return;
+      }
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goToDashboard() {
+    if (setupComplete && businessId) {
+      queryClient.setQueryData(["business"], (current: { id?: number; isOnboarded?: boolean } | null | undefined) => ({
+        ...(current ?? {}),
+        id: current?.id ?? businessId,
+        isOnboarded: true,
+      }));
+    }
+    setLocation("/");
   }
 
   const dayLabels: Record<string, string> = {
@@ -92,7 +219,6 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
             <Sparkles className="w-7 h-7 text-primary-foreground" />
@@ -101,7 +227,6 @@ export default function Onboarding() {
           <p className="text-muted-foreground mt-2">Set up your AI front desk in 2 minutes</p>
         </div>
 
-        {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {STEPS.slice(0, 4).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
@@ -116,7 +241,6 @@ export default function Onboarding() {
         </div>
 
         <div className="bg-card rounded-2xl border border-card-border shadow-sm p-6">
-          {/* Step 0: Business */}
           {step === 0 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
@@ -151,7 +275,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 1: Contact */}
           {step === 1 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
@@ -182,7 +305,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 2: Hours */}
           {step === 2 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-4">
@@ -249,7 +371,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 3: AI settings */}
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
@@ -263,10 +384,10 @@ export default function Onboarding() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="friendly">Friendly & Warm 😊</SelectItem>
-                    <SelectItem value="professional">Professional & Formal 🤝</SelectItem>
-                    <SelectItem value="premium">Premium & Exclusive ✨</SelectItem>
-                    <SelectItem value="casual">Casual & Fun 🎉</SelectItem>
+                    <SelectItem value="friendly">Friendly & Warm</SelectItem>
+                    <SelectItem value="professional">Professional & Formal</SelectItem>
+                    <SelectItem value="premium">Premium & Exclusive</SelectItem>
+                    <SelectItem value="casual">Casual & Fun</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -287,20 +408,18 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 4: Done */}
           {step === 4 && (
             <div className="text-center py-4 space-y-4">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-2">
                 <CheckCircle className="w-9 h-9 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold">You're all set! 🎉</h2>
+              <h2 className="text-xl font-bold">You're all set!</h2>
               <p className="text-muted-foreground text-sm">
                 Your AI front desk is ready. We've also added a few sample services to get you started.
               </p>
             </div>
           )}
 
-          {/* Footer buttons */}
           <div className="flex justify-between mt-6">
             {step > 0 && step < 4 && (
               <Button variant="outline" onClick={() => setStep((s) => s - 1)}>Back</Button>
@@ -308,13 +427,13 @@ export default function Onboarding() {
             {step < 4 ? (
               <Button
                 className="ml-auto"
-                onClick={step === 3 ? submit : () => setStep((s) => s + 1)}
+                onClick={step === 2 ? createBusinessRecord : step === 3 ? submitAiSettings : () => setStep((s) => s + 1)}
                 disabled={loading || (step === 0 && (!form.name || !form.ownerName))}
               >
-                {loading ? "Saving..." : step === 3 ? "Complete Setup" : "Next →"}
+                {loading ? "Saving..." : step === 3 ? "Complete Setup" : "Next ->"}
               </Button>
             ) : (
-              <Button className="w-full" onClick={() => setLocation("/")}>Go to Dashboard</Button>
+              <Button className="w-full" onClick={goToDashboard}>Go to Dashboard</Button>
             )}
           </div>
         </div>

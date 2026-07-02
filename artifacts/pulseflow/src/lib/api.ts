@@ -1,6 +1,22 @@
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 export const apiBase = `${base}/api`;
 
+export class ApiFetchError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`API error ${status}${body ? `: ${body}` : ""}`);
+    this.name = "ApiFetchError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export function isMissingBusinessResponse(error: unknown): boolean {
+  return error instanceof ApiFetchError && (error.status === 401 || error.status === 404);
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${apiBase}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -8,9 +24,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`API error ${res.status}: ${text}`);
+    throw new ApiFetchError(res.status, text);
   }
-  return res.json() as Promise<T>;
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null as T;
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return null as T;
+  }
+  return JSON.parse(text) as T;
 }
 
 export function formatCurrency(amount: number | string): string {

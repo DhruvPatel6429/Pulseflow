@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, isMissingBusinessResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface Business {
@@ -46,9 +46,21 @@ export default function Settings() {
   const [form, setForm] = useState<Partial<Business>>({});
   const [hours, setHours] = useState<WorkingHours>({});
 
-  const { data, isLoading } = useQuery<Business>({
+  const { data, isLoading } = useQuery<Business | null>({
     queryKey: ["business"],
-    queryFn: () => apiFetch("/business"),
+    queryFn: async () => {
+      try {
+        const res = await apiFetch<Business | null>("/business");
+        console.log("business API response:", res);
+        return res ?? null;
+      } catch (error) {
+        if (isMissingBusinessResponse(error)) {
+          console.log("business API response:", null);
+          return null;
+        }
+        throw error;
+      }
+    },
   });
 
   useEffect(() => {
@@ -65,6 +77,11 @@ export default function Settings() {
   }
 
   async function save() {
+    if (!data?.id) {
+      toast({ description: "Finish onboarding before saving settings.", variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
     try {
       await apiFetch("/business", {

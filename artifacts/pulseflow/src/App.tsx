@@ -24,7 +24,7 @@ import Onboarding from "@/pages/onboarding";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
 import NotFound from "@/pages/not-found";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, isMissingBusinessResponse } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // REQUIRED — resolves publishable key from hostname (supports custom domains)
@@ -97,12 +97,25 @@ function ClerkCacheInvalidator() {
 function AppGuard() {
   const [location] = useLocation();
 
-  const { data: business, isLoading } = useQuery<{ isOnboarded: boolean } | null>({
+  const { data: business, isLoading } = useQuery<{ id?: number; isOnboarded: boolean } | null>({
     queryKey: ["business"],
-    queryFn: () =>
-      apiFetch<{ isOnboarded: boolean }>("/business").catch(() => null),
+    queryFn: async () => {
+      try {
+        const res = await apiFetch<{ id?: number; isOnboarded: boolean } | null>("/business");
+        console.log("business API response:", res);
+        return res ?? null;
+      } catch (error) {
+        if (isMissingBusinessResponse(error)) {
+          console.log("business API response:", null);
+          return null;
+        }
+        throw error;
+      }
+    },
     staleTime: 60000,
   });
+  const businessId = business?.id ?? null;
+  console.log("business state:", businessId);
 
   if (isLoading) {
     return (
