@@ -36,21 +36,29 @@ export async function requireBusiness(
     return;
   }
 
-  const [business] = await db
-    .select({ id: businessesTable.id })
-    .from(businessesTable)
-    .where(eq(businessesTable.clerkUserId, userId))
-    .limit(1);
-
-  if (!business) {
-    // User is authenticated but has no business yet — let onboarding create one
-    req.clerkUserId = userId;
-    req.businessId = 0; // sentinel — routes can check for this
-    next();
+  let business: { id: number } | undefined;
+  try {
+    [business] = await db
+      .select({ id: businessesTable.id })
+      .from(businessesTable)
+      .where(eq(businessesTable.clerkUserId, userId))
+      .limit(1);
+  } catch (err) {
+    // Real DB infrastructure error (e.g. connection lost) — propagate to error handler
+    next(err);
     return;
   }
 
   req.clerkUserId = userId;
+
+  if (!business) {
+    // User is authenticated but has no business yet — onboarding will create one.
+    // businessId = 0 is the sentinel value; POST /business checks for this.
+    req.businessId = 0;
+    next();
+    return;
+  }
+
   req.businessId = business.id;
   next();
 }

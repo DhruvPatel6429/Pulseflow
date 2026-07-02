@@ -57,11 +57,14 @@ export default function Onboarding() {
     setLoading(true);
     setError("");
     try {
+      // Create the business — returns the new record with its real DB id
       await apiFetch("/business", {
         method: "POST",
         body: JSON.stringify({ ...form, isOnboarded: true }),
       });
-      // Seed default services
+
+      // Seed starter services. The server resolves businessId from the Clerk
+      // session via requireBusiness middleware — no need to pass it in the body.
       const defaultServices = [
         { name: "Haircut", category: "hair", price: 300, durationMinutes: 45, isActive: true },
         { name: "Facial", category: "skin", price: 800, durationMinutes: 60, isActive: true },
@@ -70,7 +73,7 @@ export default function Onboarding() {
       for (const svc of defaultServices) {
         await apiFetch("/services", {
           method: "POST",
-          body: JSON.stringify({ ...svc, businessId: 1, requiresConsultation: false, requiresTokenAdvance: false }),
+          body: JSON.stringify({ ...svc, requiresConsultation: false, requiresTokenAdvance: false }),
         }).catch(() => {});
       }
       setStep(4);

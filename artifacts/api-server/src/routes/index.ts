@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireBusiness, requireAuth } from "../middlewares/requireBusiness";
+import { requireBusiness } from "../middlewares/requireBusiness";
 import healthRouter from "./health";
 import businessRouter from "./business";
 import servicesRouter from "./services";
@@ -22,10 +22,12 @@ router.use(webhooksRouter);   // WhatsApp callbacks from Meta — must be public
 router.use(cronRouter);       // Internal cron trigger — should be protected by cron secret in prod
 router.use(seedRouter);       // Demo seed — public in dev
 
-// ── Business onboarding ───────────────────────────────────────────────────────
-// Uses requireAuth (lighter) instead of requireBusiness so the user can create
-// their first business without having one yet.
-router.use(requireAuth as never, businessRouter);
+// ── Business routes (all methods) ─────────────────────────────────────────────
+// requireBusiness handles both cases:
+//   • businessId === 0  → authenticated user with no business yet (onboarding)
+//   • businessId  > 0  → authenticated user with an existing business
+// POST /business checks businessId === 0 before creating; GET/PATCH check > 0.
+router.use(requireBusiness as never, businessRouter);
 
 // ── Protected routes — require a linked business ──────────────────────────────
 const protectedRouter: IRouter = Router();

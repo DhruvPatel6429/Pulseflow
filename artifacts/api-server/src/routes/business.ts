@@ -8,6 +8,9 @@ import {
   UpdateBusinessBody,
 } from "@workspace/api-zod";
 
+// Note: req.businessId is set by requireBusiness middleware (routes/index.ts).
+// 0 = authenticated but no business yet; > 0 = has an existing business.
+
 const router: IRouter = Router();
 
 /** GET /business — returns the authenticated user's business (or 404 if not onboarded) */
@@ -26,33 +29,40 @@ router.get("/business", async (req, res): Promise<void> => {
 
 /** POST /business — create a new business for this Clerk user (onboarding) */
 router.post("/business", async (req, res): Promise<void> => {
+  // requireBusiness middleware already resolved the Clerk user → business mapping.
+  // businessId > 0  means the user already completed onboarding — reject duplicates.
+  // businessId === 0 means no business yet — safe to create.
+  if (req.businessId > 0) {
+    res.status(409).json({ error: "Business already exists. Use PATCH to update." });
+    return;
+  }
+
   const parsed = CreateBusinessBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const clerkUserId = req.clerkUserId;
-
-  // Check if this user already has a business
-  if (clerkUserId) {
-    const existing = await db
-      .select({ id: businessesTable.id })
-      .from(businessesTable)
-      .where(eq(businessesTable.clerkUserId, clerkUserId))
-      .limit(1);
-
-    if (existing.length > 0) {
+  let biz: typeof businessesTable.$inferSelect;
+  try {
+    [biz] = await db.insert(businessesTable).values({
+      ...parsed.data,
+      clerkUserId: req.clerkUserId ?? null,
+      isOnboarded: true,
+    }).returning();
+  } catch (err: unknown) {
+    // Postgres unique_violation (23505) on clerk_user_id — race-safe duplicate guard
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code: string }).code === "23505"
+    ) {
       res.status(409).json({ error: "Business already exists. Use PATCH to update." });
       return;
     }
+    throw err;
   }
-
-  const [biz] = await db.insert(businessesTable).values({
-    ...parsed.data,
-    clerkUserId: clerkUserId ?? null,
-    isOnboarded: true,
-  }).returning();
 
   await db.insert(automationSettingsTable)
     .values({ businessId: biz.id })
