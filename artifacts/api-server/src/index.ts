@@ -1,7 +1,10 @@
+import dotenv from "dotenv";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+
+dotenv.config();
 
 const rawPort = process.env["PORT"];
 

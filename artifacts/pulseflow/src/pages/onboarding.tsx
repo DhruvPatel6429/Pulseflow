@@ -37,13 +37,22 @@ interface Business {
 }
 
 export default function Onboarding() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(window.sessionStorage.getItem("pulseflow-onboarding-step") ?? "0");
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [businessId, setBusinessId] = useState<number | null>(null);
   const [setupComplete, setSetupComplete] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("pulseflow-onboarding-step", String(step));
+    }
+  }, [step]);
 
   const [form, setForm] = useState({
     name: "",
@@ -182,10 +191,19 @@ export default function Onboarding() {
         }),
       });
       console.log("business API response:", res);
-      setBusinessId(res?.id ?? businessId);
-      console.log("business state:", res?.id ?? businessId);
+      const updatedBusiness = {
+        ...res,
+        id: res?.id ?? businessId,
+        isOnboarded: true,
+      };
+      setBusinessId(updatedBusiness.id ?? businessId);
+      console.log("business state:", updatedBusiness.id ?? businessId);
       setSetupComplete(true);
+      queryClient.setQueryData(["business"], updatedBusiness);
       setStep(4);
+      if (location !== "/") {
+        setLocation("/");
+      }
     } catch (e: unknown) {
       if (isMissingBusinessResponse(e)) {
         setBusinessId(null);
@@ -208,7 +226,9 @@ export default function Onboarding() {
         isOnboarded: true,
       }));
     }
-    setLocation("/");
+    if (location !== "/") {
+      setLocation("/");
+    }
   }
 
   const dayLabels: Record<string, string> = {
