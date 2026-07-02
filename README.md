@@ -17,8 +17,11 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 - [Automations & Reminders](#automations--reminders)
 - [Auth Flow](#auth-flow)
 - [Environment Variables](#environment-variables)
-- [Running Locally](#running-locally)
+- [Replit Setup](#replit-setup)
+- [Running Locally (non-Replit)](#running-locally-non-replit)
+- [Production Deployment (Replit)](#production-deployment-replit)
 - [Drizzle ORM & Database](#drizzle-orm--database)
+- [Known Limitations](#known-limitations)
 
 ---
 
@@ -29,10 +32,12 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 | **Frontend** | React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui, Radix UI, Wouter (routing), TanStack Query |
 | **Backend** | Express 5, Node.js, TypeScript (ESM) |
 | **Database** | PostgreSQL (Neon serverless), Drizzle ORM |
-| **Auth** | Clerk (external instance, Clerk Frontend API proxied for `.replit.app` compatibility) |
+| **Auth** | Clerk (Replit-managed tenant; Clerk Frontend API proxied for `*.replit.app` compatibility) |
 | **AI** | Rule-based intent engine (default) + OpenAI GPT-4o (optional, when `OPENAI_API_KEY` is set) |
 | **WhatsApp** | Meta WhatsApp Cloud API (sandbox/log-only mode when credentials are absent) |
 | **Monorepo** | pnpm workspaces |
+| **Build (API)** | esbuild (via `build.mjs`) — output: `artifacts/api-server/dist/index.mjs` |
+| **Build (Frontend)** | Vite — output: `artifacts/pulseflow/dist/public/` (static, served by Replit CDN in production) |
 
 ---
 
@@ -41,23 +46,58 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 ```
 /
 ├── artifacts/
-│   ├── api-server/          # Express backend (port 3000 dev, 8080 prod)
-│   │   └── src/
-│   │       ├── routes/      # All API route handlers
-│   │       ├── middlewares/ # Clerk auth, business context, error handling
-│   │       └── lib/         # AI engine, booking engine, WhatsApp, automations
-│   └── pulseflow/           # React + Vite frontend
+│   ├── api-server/                 # Express backend
+│   │   ├── build.mjs               # esbuild bundler script
+│   │   ├── src/
+│   │   │   ├── index.ts            # Entry point: listen, diagnostics, graceful shutdown
+│   │   │   ├── app.ts              # Express app: middleware stack, /api prefix
+│   │   │   ├── routes/             # Route handlers (one file per domain)
+│   │   │   │   ├── index.ts        # Router assembly (public vs. protected)
+│   │   │   │   ├── health.ts       # GET /healthz, GET /ready
+│   │   │   │   ├── business.ts     # GET/POST/PATCH /business
+│   │   │   │   ├── services.ts     # CRUD /services
+│   │   │   │   ├── customers.ts    # CRUD /customers
+│   │   │   │   ├── bookings.ts     # Full booking lifecycle
+│   │   │   │   ├── conversations.ts# WhatsApp inbox
+│   │   │   │   ├── ai.ts           # AI inbox & action approval
+│   │   │   │   ├── automation.ts   # Automation settings & templates
+│   │   │   │   ├── dashboard.ts    # Stats, today, upcoming
+│   │   │   │   ├── jobs.ts         # Reminder job queue (debug/admin)
+│   │   │   │   ├── webhooks.ts     # Meta WhatsApp Cloud webhook
+│   │   │   │   ├── cron.ts         # Cron trigger for automation processing
+│   │   │   │   └── seed.ts         # Demo data seed/wipe
+│   │   │   ├── middlewares/
+│   │   │   │   ├── requireBusiness.ts  # Clerk auth → businessId resolution
+│   │   │   │   ├── timeout.ts          # 15-second request timeout
+│   │   │   │   └── errorMiddleware.ts  # Global error handler (JSON responses)
+│   │   │   └── lib/
+│   │   │       ├── ai/             # Intent classifier, entity extractor, responder
+│   │   │       ├── ai-engine.ts    # Orchestrates AI pipeline per inbound message
+│   │   │       ├── automation-service.ts  # Job scheduling helpers
+│   │   │       ├── booking-engine.ts      # Slot availability & conflict checks
+│   │   │       ├── channels/       # WhatsApp channel adapter
+│   │   │       ├── logger.ts       # Pino logger instance
+│   │   │       ├── templates/      # Message template strings
+│   │   │       └── whatsapp.ts     # Meta WhatsApp Cloud API adapter
+│   └── pulseflow/                  # React + Vite frontend
+│       ├── vite.config.ts          # Vite config (dev proxy → localhost:3000)
 │       └── src/
-│           ├── pages/       # Full-page views
-│           ├── components/  # Shared UI (shadcn/ui + custom)
-│           ├── hooks/       # useAuthGuard, useMobile
-│           └── lib/         # apiFetch, formatters, utilities
+│           ├── pages/              # Full-page route components
+│           ├── components/         # Shared UI (shadcn/ui + custom)
+│           ├── hooks/              # useAuthGuard, useMobile
+│           └── lib/                # apiFetch, formatters, utility helpers
 ├── lib/
-│   ├── db/                  # Drizzle schema, drizzle.config.ts, pg Pool
-│   ├── api-zod/             # Shared Zod request/response schemas
-│   ├── api-spec/            # OpenAPI spec
-│   └── api-client-react/    # Generated type-safe API client
-└── .env.example             # All environment variables documented
+│   ├── db/                         # @workspace/db — shared database package
+│   │   ├── drizzle.config.ts       # Drizzle Kit config (reads DATABASE_URL)
+│   │   └── src/
+│   │       ├── schema/             # One schema file per table
+│   │       └── index.ts            # Re-exports tables + pg pool instance
+│   ├── api-zod/                    # @workspace/api-zod — shared Zod request schemas
+│   ├── api-spec/                   # OpenAPI specification
+│   └── api-client-react/           # Generated type-safe React API client
+├── scripts/                        # Post-merge and utility scripts
+├── .env.example                    # All environment variables documented
+└── pnpm-workspace.yaml
 ```
 
 ---
@@ -68,7 +108,7 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 - 4-step wizard: Business details → Contact & Location → Working Hours → AI Personality
 - Sets business name, category, owner name, phone, WhatsApp number, city, address, Google Maps link, timezone, working hours (per-day open/close), cancellation policy, preferred AI tone, and Google review link
 - On completion: creates business record + seeds 3 starter services (Haircut, Facial, Manicure)
-- Fully idempotent — `POST /api/business` rejects duplicates (409) using the Clerk session, not a hardcoded ID
+- Fully idempotent — `POST /api/business` rejects duplicates (409) keyed on Clerk `userId`
 
 ### ✅ Dashboard
 - Today's appointments at a glance
@@ -77,15 +117,15 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 - Quick-action buttons
 
 ### ✅ Appointment Booking System
-- Calendar view of all bookings
-- Create new booking form (`/bookings/new`)
+- Calendar view of all bookings with date/status filtering
+- Create new booking form (`/bookings/new`) with real-time slot availability
 - Full booking lifecycle: `pending → confirmed → completed / cancelled / no_show / rescheduled`
 - AI-created bookings flagged separately (`created_by_ai`)
 - Slot availability engine: 30-minute intervals, respects working hours and existing confirmed bookings
 
 ### ✅ Customer CRM
 - Customer list with search
-- Per-customer: visit count, WhatsApp number, notes
+- Per-customer: visit count, WhatsApp number, notes, booking history
 - Auto-created when a new WhatsApp contact messages the salon
 
 ### ✅ Service Menu Management
@@ -107,15 +147,15 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 - **AI action approval flow**: owner approves / rejects AI-suggested booking actions before they execute
 
 ### ✅ Automation & Reminder System
+- **Booking confirmation**: sent immediately on booking confirmation
 - **24-hour reminder**: sent the day before the appointment
 - **2-hour reminder**: sent 2 hours before
-- **Booking confirmation**: sent immediately on booking confirmation
-- **Review request**: sent after appointment completion
+- **Review request**: sent after appointment completion (configurable delay, default 2 h)
 - **Repeat reminder**: if a service has `repeat_reminder_days` set, reminds customer to rebook
-- **Missed follow-up**: for no-show appointments
+- **Missed follow-up**: for no-show appointments, sent 2 h after scheduled time
 - All jobs stored in `reminder_jobs` table with `scheduledFor` timestamp
 - Idempotent job creation — duplicate triggers are safe
-- Business-level toggles to enable/disable each automation type
+- Per-business toggles to enable/disable each automation type
 - Customisable message templates with `{name}`, `{service}`, `{date}`, `{time}` placeholders
 
 ### ✅ Demo Seed Data
@@ -127,15 +167,16 @@ PulseFlow is a full-stack SaaS application that gives Indian beauty and wellness
 - Clerk auth (email + password + Google OAuth)
 - Clerk Frontend API proxied at `/api/__clerk` so auth works on `*.replit.app` subdomains without a custom domain
 - `requireBusiness` middleware: resolves Clerk `userId` → `businessId` for every authenticated request; sets `businessId = 0` sentinel for pre-onboarding users instead of crashing
-- `requireAuth` utility available for routes that only need the Clerk user identity
+- `useAuthGuard` hook on the frontend redirects unauthenticated users to `/sign-in` and unboarded users to `/onboarding`
 
 ### ✅ Health & Observability
-- `GET /api/healthz` — returns `{ status: "ok" }` (used by production health checks)
-- `GET /api/ready` — full readiness check (DB ping + critical env vars)
+- `GET /api/healthz` — returns `{ status: "ok" }` (liveness probe used by Replit health checks)
+- `GET /api/ready` — readiness check (DB ping + critical env vars)
 - Structured JSON logging via `pino` + `pino-http`
 - Request IDs on every request
 - Global error handler — maps unhandled errors to clean JSON responses
 - 15-second request timeout middleware
+- Graceful shutdown on `SIGTERM` / `SIGINT` with 10-second hard timeout
 
 ---
 
@@ -146,37 +187,45 @@ All tables live in the `public` schema on Neon PostgreSQL. Managed by Drizzle OR
 | Table | Purpose |
 |---|---|
 | `businesses` | Core business profile: name, owner, phone, WhatsApp number, working hours (JSONB), AI tone, policies, Clerk user ID |
-| `services` | Service menu: name, category, price (numeric), duration, repeat reminder days, flags |
-| `customers` | CRM: name, phone, WhatsApp number, visit count, notes, last visit date |
-| `bookings` | Appointments: customer, service, date, time, status, notes, AI-created flag |
-| `conversations` | WhatsApp chat threads: customer ↔ business, AI status, last message preview |
-| `messages` | Individual messages: direction (inbound/outbound), content, AI-generated flag, timestamp |
-| `ai_action_logs` | AI decisions pending owner approval: suggested action, confidence, status (pending/approved/rejected) |
-| `automation_settings` | Per-business automation toggles and custom message templates |
-| `reminder_jobs` | Scheduled automation queue: type, scheduledFor, status (pending/sent/failed/skipped), bookingId |
+| `services` | Service menu: name, category, price (numeric), duration (minutes), repeat reminder days, flags |
+| `customers` | CRM: name, phone, visit count, notes, last visit date, source |
+| `bookings` | Appointments: customer, service, date, start/end time, status, notes, AI-created flag |
+| `conversations` | WhatsApp chat threads: one row per customer ↔ business thread; tracks channel, status, last message timestamp |
+| `messages` | Individual messages within a conversation: direction (inbound/outbound), content, message type, provider message ID, AI-generated flag, approval-required flag |
+| `ai_action_logs` | AI decisions pending owner approval: action type, input/output summary, reply draft, confidence score, status |
+| `automation_settings` | Per-business automation toggles, confidence threshold, and custom message templates |
+| `reminder_jobs` | Scheduled automation queue: type, `scheduledFor` timestamp, status (`pending`/`sent`/`failed`/`skipped`), JSONB payload |
+
+Schema source: `lib/db/src/schema/` — one TypeScript file per table.
 
 ---
 
 ## API Routes
 
-### Public (no auth)
+All routes are mounted under the `/api` prefix.
+
+### Public (no auth required)
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/healthz` | Liveness check |
+| `GET` | `/api/healthz` | Liveness probe — returns `{ status: "ok" }` |
 | `GET` | `/api/ready` | Readiness check (DB + env) |
-| `GET/POST` | `/api/webhooks/whatsapp` | Meta WhatsApp Cloud API webhook |
-| `POST` | `/api/cron/process-automations` | Trigger due reminder jobs (called by cron) |
+| `GET` | `/api/webhooks/whatsapp` | Meta webhook verification challenge |
+| `POST` | `/api/webhooks/whatsapp` | Receive inbound WhatsApp messages |
+| `POST` | `/api/cron/process-automations` | Process due reminder jobs (called by external cron) |
 | `POST` | `/api/seed/demo` | Seed GlowNest Studio demo data |
 | `DELETE` | `/api/seed/demo` | Wipe all demo data |
 
 ### Business (Clerk auth required; `businessId` resolved from session)
+
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/business` | Get own business profile |
-| `POST` | `/api/business` | Create business (onboarding step) |
-| `PATCH` | `/api/business` | Update business profile |
+| `POST` | `/api/business` | Create business (onboarding step 2) |
+| `PATCH` | `/api/business` | Update business profile or AI settings |
 
 ### Services
+
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/services` | List all services |
@@ -186,59 +235,67 @@ All tables live in the `public` schema on Neon PostgreSQL. Managed by Drizzle OR
 | `DELETE` | `/api/services/:id` | Delete service |
 
 ### Customers
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/customers` | List customers |
+| `GET` | `/api/customers` | List customers (supports search query param) |
 | `POST` | `/api/customers` | Create customer |
-| `GET` | `/api/customers/:id` | Get customer |
+| `GET` | `/api/customers/:id` | Get customer with booking history |
 | `PATCH` | `/api/customers/:id` | Update customer |
 
 ### Bookings
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/bookings` | List bookings (filterable by date/status) |
-| `POST` | `/api/bookings` | Create booking |
-| `GET` | `/api/bookings/:id` | Get booking |
-| `PATCH` | `/api/bookings/:id` | Update booking |
-| `POST` | `/api/bookings/:id/confirm` | Confirm → schedules reminder chain |
-| `POST` | `/api/bookings/:id/cancel` | Cancel booking |
-| `POST` | `/api/bookings/:id/complete` | Complete → schedules review request |
-| `POST` | `/api/bookings/:id/no-show` | Mark no-show → schedules follow-up |
-| `POST` | `/api/bookings/:id/reschedule` | Reschedule booking |
+| `GET` | `/api/bookings/available-slots` | Available 30-minute slots for a service+date |
+| `GET` | `/api/bookings` | List bookings (filterable by date, status, serviceId, customerId, from, to) |
+| `POST` | `/api/bookings` | Create booking (auto-creates customer if new phone number) |
+| `GET` | `/api/bookings/:id` | Get booking with enriched service + customer |
+| `PATCH` | `/api/bookings/:id` | Update booking fields |
+| `POST` | `/api/bookings/:id/confirm` | Confirm → schedules 24h + 2h + confirmation automations |
+| `POST` | `/api/bookings/:id/cancel` | Cancel → cancels pending reminder jobs |
+| `POST` | `/api/bookings/:id/complete` | Complete → updates customer visit count, schedules review request |
+| `POST` | `/api/bookings/:id/no-show` | Mark no-show → schedules missed follow-up |
+| `POST` | `/api/bookings/:id/reschedule` | Reschedule (checks slot conflict, updates times) |
 
 ### Conversations & Inbox
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/conversations` | List conversations |
-| `GET` | `/api/conversations/:id` | Get conversation + messages |
-| `POST` | `/api/conversations/:id/send` | Send manual WhatsApp message |
+| `GET` | `/api/conversations` | List all WhatsApp conversations |
+| `GET` | `/api/conversations/:id` | Get conversation with messages |
+| `POST` | `/api/conversations/:id/send` | Send a manual WhatsApp message |
 
 ### AI Actions
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/ai/inbox` | AI-flagged actions awaiting approval |
-| `POST` | `/api/ai/process` | Manually trigger AI on a message |
-| `POST` | `/api/ai/actions/:id/approve` | Approve AI booking action |
-| `POST` | `/api/ai/actions/:id/reject` | Reject AI booking action |
+| `GET` | `/api/ai/inbox` | AI-flagged actions awaiting owner approval |
+| `POST` | `/api/ai/process` | Manually trigger AI processing on a message |
+| `POST` | `/api/ai/actions/:id/approve` | Approve AI-suggested booking action |
+| `POST` | `/api/ai/actions/:id/reject` | Reject AI-suggested booking action |
 
 ### Automations
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/automation` | Get automation settings + templates |
-| `PATCH` | `/api/automation` | Update toggles / templates |
+| `GET` | `/api/automation` | Get automation settings + templates for this business |
+| `PATCH` | `/api/automation` | Update toggles, thresholds, or message templates |
 
 ### Dashboard
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/dashboard/stats` | Revenue + booking counts |
-| `GET` | `/api/dashboard/today` | Today's appointments |
-| `GET` | `/api/dashboard/upcoming` | Upcoming bookings |
 
-### Jobs (debug/admin)
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/jobs` | View job queue |
-| `POST` | `/api/jobs/:id/trigger` | Manually trigger a specific job |
+| `GET` | `/api/dashboard/stats` | Revenue and booking counts (daily/weekly/monthly) |
+| `GET` | `/api/dashboard/today` | Today's appointments |
+| `GET` | `/api/dashboard/upcoming` | Next upcoming bookings |
+
+### Jobs (admin/debug)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/jobs` | View reminder job queue |
+| `POST` | `/api/jobs/:id/trigger` | Manually trigger a specific reminder job |
 
 ---
 
@@ -248,8 +305,8 @@ All tables live in the `public` schema on Neon PostgreSQL. Managed by Drizzle OR
 |---|---|---|
 | `/` | Dashboard | Metrics, today's agenda, quick actions |
 | `/inbox` | Inbox | WhatsApp conversations with AI status badges |
-| `/bookings` | Bookings | Calendar view of all appointments |
-| `/bookings/new` | New Booking | Appointment creation form |
+| `/bookings` | Bookings | Filterable list of all appointments |
+| `/bookings/new` | New Booking | Appointment creation form with live slot picker |
 | `/customers` | Customers | CRM list with visit history |
 | `/services` | Services | Service menu management |
 | `/automations` | Automations | Toggle and customise reminder messages |
@@ -265,18 +322,18 @@ All tables live in the `public` schema on Neon PostgreSQL. Managed by Drizzle OR
 Located in `artifacts/api-server/src/lib/ai/` and `src/lib/ai-engine.ts`.
 
 **Flow for every inbound WhatsApp message:**
-1. Message stored in `messages` table
+1. Message stored in `conversations` table
 2. AI engine called via `processInbound()`
-3. Intent classifier (`classifier.ts`) scores the message against known intents
+3. Intent classifier scores the message against known intents
 4. Entity extractor pulls service name, date, time from message text
 5. If `booking_request` or `availability_inquiry`: booking engine checks real-time slot availability
 6. Responder generates a reply using templates or OpenAI GPT-4o
-7. If confidence is low or intent is `cancel_request` / `reschedule_request`: `shouldEscalateToOwner = true` → creates an `ai_action_logs` entry and notifies the dashboard
-8. Otherwise: reply is sent automatically via WhatsApp channel
+7. If confidence is low or intent is `cancel_request` / `reschedule_request`: `shouldEscalateToOwner = true` → creates an `ai_action_logs` entry visible in the AI Inbox
+8. Otherwise: reply is sent automatically via the WhatsApp channel
 
 **OpenAI mode** (requires `OPENAI_API_KEY`): passes business context (name, services, hours, tone) + conversation history to GPT-4o for natural language responses.
 
-**Rule-based mode** (default): uses pre-written templates in `message-templates.ts`, substituting `{name}`, `{service}`, `{date}`, `{time}` placeholders.
+**Rule-based mode** (default): uses pre-written templates in `artifacts/api-server/src/lib/templates/`, substituting `{name}`, `{service}`, `{date}`, `{time}` placeholders.
 
 ---
 
@@ -284,34 +341,34 @@ Located in `artifacts/api-server/src/lib/ai/` and `src/lib/ai-engine.ts`.
 
 Located in `artifacts/api-server/src/lib/whatsapp.ts` and `src/lib/channels/`.
 
-**Real mode** (requires `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`):
-- Sends messages via Meta WhatsApp Cloud API
-- Webhook at `GET /api/webhooks/whatsapp` handles Meta's verification challenge
-- Webhook at `POST /api/webhooks/whatsapp` receives inbound messages
+**Live mode** (requires `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`):
+1. Sends messages via Meta WhatsApp Cloud API
+2. Webhook at `GET /api/webhooks/whatsapp` handles Meta's hub verification challenge
+3. Webhook at `POST /api/webhooks/whatsapp` receives inbound messages
+4. Set `WHATSAPP_VERIFY_TOKEN` in business settings to match the token configured in the Meta App Dashboard
 
-**Sandbox/mock mode** (default when credentials absent):
-- All outbound messages are logged to the console only — no real messages sent
-- Inbound messages can be simulated via `POST /api/sandbox/send-message`
+**Sandbox/mock mode** (default when credentials are absent):
+- All outbound messages are logged to the server console only — no real messages sent
 - Safe to develop and demo without a WhatsApp Business account
 
 ---
 
 ## Automations & Reminders
 
-Located in `artifacts/api-server/src/lib/automation-service.ts` and `src/lib/automations/`.
+Located in `artifacts/api-server/src/lib/automation-service.ts`.
 
 **Job types and when they're scheduled:**
 
-| Automation | Trigger | Sends after |
+| Automation | Trigger | Sends at |
 |---|---|---|
 | `confirmation` | Booking confirmed | Immediately |
-| `reminder_24h` | Booking confirmed | 24 h before appointment |
-| `reminder_2h` | Booking confirmed | 2 h before appointment |
-| `review_request` | Booking completed | 1 h after completion |
-| `repeat_reminder` | Booking completed | `service.repeat_reminder_days` days later |
-| `missed_followup` | Booking marked no-show | 2 h after scheduled time |
+| `reminder_24h` | Booking confirmed | 24 h before appointment start |
+| `reminder_2h` | Booking confirmed | 2 h before appointment start |
+| `review_request` | Booking completed | `reviewRequestDelayHours` after completion (default: 2 h) |
+| `repeat_reminder` | Booking completed | `service.repeat_reminder_days` days after completion |
+| `missed_followup` | Booking marked no-show | 2 h after scheduled appointment time |
 
-Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-automations` (meant to be called by an external cron trigger every 5 minutes). Each automation type can be toggled per-business in the Automations page.
+Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-automations`. This endpoint should be called by an external cron service (e.g. cron-job.org, GitHub Actions, or a serverless scheduler) every **5 minutes**. Each automation type can be toggled per-business from the Automations page.
 
 ---
 
@@ -320,8 +377,8 @@ Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-auto
 1. User signs up / signs in via Clerk (`/sign-in`, `/sign-up`)
 2. Clerk session cookie is attached to all `/api` requests
 3. `clerkMiddleware` (from `@clerk/express`) validates the session on every request
-4. `requireBusiness` middleware resolves `clerkUserId → businessId`:
-   - If no business record found: sets `req.businessId = 0` (onboarding sentinel) — **does not crash**
+4. `requireBusiness` middleware resolves `clerkUserId → businessId` using a raw pg pool query (Drizzle parameterised query compatibility with Neon):
+   - If no business record found: sets `req.businessId = 0` (onboarding sentinel) — does **not** crash
    - If business found: sets `req.businessId = business.id`
 5. Route handlers use `req.businessId` to scope all DB queries to the correct tenant
 6. `useAuthGuard` hook on the frontend redirects unauthenticated users to `/sign-in` and unboarded users to `/onboarding`
@@ -330,50 +387,116 @@ Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-auto
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in the required values.
-
 ### Required
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string — `postgresql://user:pass@host/db?sslmode=require` |
-| `CLERK_SECRET_KEY` | Clerk backend secret key (`sk_test_...` or `sk_live_...`) |
-| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key (`pk_test_...` or `pk_live_...`) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Same value as above — exposed to the Vite frontend |
+| Variable | Where to set on Replit | Description |
+|---|---|---|
+| `DATABASE_URL` | Replit Secrets panel | PostgreSQL connection string — `postgresql://user:pass@host/db?sslmode=require` |
+| `CLERK_SECRET_KEY` | Replit Secrets panel | Clerk backend secret key (`sk_test_...` or `sk_live_...`) |
+| `CLERK_PUBLISHABLE_KEY` | `.replit` → `[userenv]` | Clerk publishable key (`pk_test_...`) |
+| `VITE_CLERK_PUBLISHABLE_KEY` | `.replit` → `[userenv]` | Same value as above — exposed to Vite frontend |
 
 ### Optional (app degrades gracefully without these)
 
 | Variable | Default behaviour when absent |
 |---|---|
-| `OPENAI_API_KEY` | Falls back to rule-based AI replies |
-| `WHATSAPP_ACCESS_TOKEN` | Sandbox mode — messages logged only, not sent |
+| `OPENAI_API_KEY` | Falls back to rule-based AI replies — fully functional |
+| `WHATSAPP_ACCESS_TOKEN` | Sandbox mode — messages logged to console, not sent |
 | `WHATSAPP_PHONE_NUMBER_ID` | Sandbox mode |
-| `WHATSAPP_VERIFY_TOKEN` | Webhook verification disabled |
-| `LOG_LEVEL` | Defaults to `info` |
-| `VITE_CLERK_PROXY_URL` | Required only in Replit production deployment |
+| `WHATSAPP_VERIFY_TOKEN` | Webhook hub verification will reject Meta's challenge |
+| `LOG_LEVEL` | Defaults to `info` (options: `trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| `VITE_CLERK_PROXY_URL` | Needed only in Replit production deployment (set automatically) |
+
+### Managed automatically (do not set manually)
+
+| Variable | Set by |
+|---|---|
+| `PORT` | Replit artifact workflow (3000 in dev, 8080 in production) |
+| `BASE_PATH` | Replit artifact workflow |
+| `NODE_ENV` | Replit artifact workflow (`development` in dev, `production` in prod) |
 
 ---
 
-## Running Locally
+## Replit Setup
+
+This project is designed to run on Replit with managed artifact workflows.
+
+### First-time setup
+
+1. **Secrets** — in the Replit Secrets panel, add:
+   - `DATABASE_URL` — your Neon connection string (e.g. `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`)
+   - `CLERK_SECRET_KEY` — from your Clerk dashboard → API Keys
+
+2. **Push the database schema**:
+   ```bash
+   pnpm --filter @workspace/db run push
+   ```
+   This creates all tables on your Neon database. Safe to re-run.
+
+3. **Start workflows** — the following managed workflows start automatically:
+   - `artifacts/api-server: API Server` — runs `pnpm build && pnpm start` on port 3000
+   - `artifacts/pulseflow: web` — runs Vite dev server on port 5173
+
+4. **Seed demo data** (optional):
+   ```bash
+   curl -X POST http://localhost:3000/api/seed/demo
+   ```
+
+### Workflow display note
+
+The **API Server** workflow shows `FINISHED` in the Replit workflow panel even while the server is live. This is a display artefact of the `build && start` chain script — the `node` process remains running and the `/api/healthz` endpoint confirms liveness. The workflow restarts cleanly when triggered.
+
+---
+
+## Running Locally (non-Replit)
 
 ```bash
 # Install dependencies
 pnpm install
 
-# Copy and fill in env vars
+# Copy and fill in environment variables
 cp .env.example .env
+# Edit .env with your DATABASE_URL, CLERK_SECRET_KEY, CLERK_PUBLISHABLE_KEY, VITE_CLERK_PUBLISHABLE_KEY
 
 # Push DB schema to your Neon database
 pnpm --filter @workspace/db run push
 
+# TypeScript check (all packages)
+pnpm run typecheck
+
 # Start API server (port 3000)
 pnpm --filter @workspace/api-server run dev
 
-# Start frontend (separate terminal)
+# Start frontend in a separate terminal (port 5173)
 pnpm --filter @workspace/pulseflow run dev
 ```
 
-The frontend Vite dev server proxies `/api/*` requests to `localhost:3000`.
+The frontend Vite dev server proxies `/api/*` and `/api/__clerk/*` to `localhost:3000` automatically.
+
+---
+
+## Production Deployment (Replit)
+
+Replit handles production deployment via the artifact configuration in `artifact.toml`.
+
+**API server** (`artifacts/api-server`):
+- Build step: `pnpm --filter @workspace/api-server run build` (esbuild → `dist/index.mjs`)
+- Run: `node --enable-source-maps artifacts/api-server/dist/index.mjs`
+- Port: **8080** (set via `PORT` env var)
+- Health check: `GET /api/healthz`
+
+**Frontend** (`artifacts/pulseflow`):
+- Build step: `pnpm --filter @workspace/pulseflow run build` (Vite → `dist/public/`)
+- Served as **static files** from `artifacts/pulseflow/dist/public/` via Replit's CDN
+- SPA fallback: all `/*` requests rewrite to `/index.html`
+
+**Pre-deployment checklist:**
+1. Run `pnpm run typecheck` — must pass with zero errors
+2. Run `pnpm --filter @workspace/api-server run build` — must succeed
+3. Run `pnpm --filter @workspace/pulseflow run build` — must succeed
+4. Confirm `GET /api/healthz` returns `{ status: "ok" }`
+5. Set `VITE_CLERK_PROXY_URL` in production environment secrets (Replit injects this automatically for managed Clerk instances)
+6. Set up an external cron trigger to `POST /api/cron/process-automations` every 5 minutes for automation delivery
 
 ---
 
@@ -384,20 +507,32 @@ Schema lives in `lib/db/src/schema/`. To make schema changes:
 ```bash
 # Edit the schema files in lib/db/src/schema/
 
-# Preview what will change
-pnpm --filter @workspace/db run push --dry-run
-
 # Apply changes to the database
 pnpm --filter @workspace/db run push
 
-# Force push (skips safety prompts — use with care)
+# Force push (skips safety prompts — use only in development)
 pnpm --filter @workspace/db run push-force
+
+# TypeScript check the lib packages after schema changes
+pnpm run typecheck:libs
 ```
 
-> **Note:** This project uses `drizzle-kit push` (direct schema push), not migration files. This is appropriate for early-stage development. For production, consider switching to `drizzle-kit generate` + `drizzle-kit migrate` for a proper migration history.
+> **Note:** This project uses `drizzle-kit push` (direct schema sync), not migration files. This is appropriate for development. For production, consider switching to `drizzle-kit generate` + `drizzle-kit migrate` for a proper migration history before going live.
+
+> **Important:** After adding or modifying schema files, always run `pnpm run typecheck:libs` before running `pnpm -r run typecheck`. The lib typecheck must complete first for the API server's TypeScript build to resolve shared types correctly.
 
 ---
 
-## Single-Tenant Architecture (Current)
+## Known Limitations
 
-The current implementation is **single-tenant per Clerk user**: each authenticated user maps to exactly one `businesses` row. The `DEFAULT_BUSINESS_ID` constant (value: `1`) exists only in the demo seed route and should not be used in production business logic — all route handlers resolve `businessId` from the authenticated Clerk session.
+| Area | Limitation |
+|---|---|
+| **Cron / Automations** | `POST /api/cron/process-automations` has no authentication. In production, protect it with a shared secret header or IP allowlist before exposing to the internet. |
+| **Seed routes** | `POST /api/seed/demo` and `DELETE /api/seed/demo` are public with no auth. Remove or gate these routes before production launch. |
+| **WhatsApp** | Requires a verified Meta Business account and an approved WhatsApp Business number. Sandbox mode works for development and demo but sends no real messages. |
+| **OpenAI AI replies** | Without `OPENAI_API_KEY`, the AI falls back to rule-based keyword templates. These cover common intents but will not handle free-form or ambiguous messages gracefully. |
+| **Single-tenant per Clerk user** | Each authenticated Clerk user maps to exactly one `businesses` row. There is no multi-business or team/staff model. |
+| **No migration history** | `drizzle-kit push` syncs schema directly without a migration log. Destructive schema changes (dropping columns) are applied immediately and cannot be rolled back automatically. |
+| **Bundle size** | The frontend JS bundle is ~553 kB minified / 165 kB gzip. Vite warns about this. Code-splitting (dynamic imports) would reduce initial load time. |
+| **Timezone handling** | Working hours are stored as plain `HH:MM` strings interpreted in the business's configured timezone. The slot engine does not yet account for DST transitions. |
+| **No rate limiting** | The API has no rate limiting on public endpoints (webhook, healthz, seed). Add a rate limiter (e.g. `express-rate-limit`) before exposing to the public internet. |
