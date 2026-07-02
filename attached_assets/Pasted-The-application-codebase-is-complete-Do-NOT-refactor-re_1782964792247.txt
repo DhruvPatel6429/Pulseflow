@@ -1,0 +1,57 @@
+The application codebase is complete. Do NOT refactor, rewrite, or modify any application logic, UI, database schema, routes, business logic, AI modules, automations, or project structure.
+
+Your ONLY objective is to configure the project so it runs successfully using Neon PostgreSQL and the OpenAI API.
+
+Tasks:
+
+1. Scan the project and identify every environment variable actually required by the codebase.
+
+2. Generate a complete `.env.example` if one does not already exist.
+
+3. Clearly identify which variables are:
+
+   * Required
+   * Optional
+   * Development only
+   * Production only
+
+4. Configure Neon PostgreSQL:
+
+   * Verify the Drizzle configuration.
+   * Verify the database connection uses `DATABASE_URL`.
+   * Ensure SSL settings are correct for Neon.
+   * Verify migrations can run successfully.
+   * If tables do not exist, provide the exact commands required to create them.
+   * Do NOT modify the schema unless absolutely necessary.
+
+5. Configure OpenAI:
+
+   * Verify where `OPENAI_API_KEY` is used.
+   * Ensure the application gracefully falls back if the key is missing.
+   * Verify the OpenAI client initializes correctly once the key is added.
+   * Do NOT change prompts or AI logic.
+
+6. Verify startup:
+
+   * Confirm backend starts successfully.
+   * Confirm frontend starts successfully.
+   * Confirm database connection succeeds.
+   * Confirm OpenAI initialization succeeds (when a valid key is present).
+   * Report any missing secrets without changing application code.
+
+7. At the end, provide:
+
+   * The exact `.env` variables I must fill in.
+   * The exact Neon database URL format expected.
+   * The exact OpenAI API key variable name expected.
+   * The commands to run migrations.
+   * The commands to start the application locally in Replit.
+
+Important constraints:
+
+* Do NOT modify business logic.
+* Do NOT add features.
+* Do NOT refactor code.
+* Do NOT change APIs.
+* Do NOT alter the database schema.
+* Only make the minimum changes required for environment configuration and successful local startup.
