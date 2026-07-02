@@ -4,7 +4,7 @@ AI-powered WhatsApp front desk for solo beauty & wellness businesses in India �
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 3000 in dev, 8080 in production)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run typecheck:libs` — rebuild lib declarations (run after adding DB schema files)
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
