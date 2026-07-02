@@ -1,3 +1,4 @@
+- [Drizzle queryWithCache / Neon](drizzle-neon-pool.md) — Drizzle fails on Neon for parameterized queries in middleware; use raw pool.query() in requireBusiness; errorMiddleware now logs err.cause
 - [PulseFlow architecture](pulseflow-arch.md) — DB lib stale declarations bug: after adding schema files, always run `pnpm run typecheck:libs` before api-server typecheck
 - [PulseFlow stack](pulseflow-arch.md) — single-tenant MVP (DEFAULT_BUSINESS_ID=1), WhatsApp sandbox mode unless env vars set, rule-based AI intent engine
 - [PulseFlow automation engine](pulseflow-arch.md) — createAutomationEvent() is idempotent; processDueAutomationEvents() handles scheduling; seed route is re-entrant (wipes+reseeds if business exists)

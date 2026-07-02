@@ -15,12 +15,24 @@ export function globalErrorHandler(
   const statusCode = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
 
+  const cause = (err as unknown as { cause?: unknown }).cause;
+
   logger.error(
     {
       err: {
         name: err.name,
         message: err.message,
         stack: err.stack,
+        // Surface the original pg error when Drizzle wraps it
+        ...(cause
+          ? {
+              cause: {
+                message: (cause as Error).message,
+                code: (cause as { code?: string }).code,
+                detail: (cause as { detail?: string }).detail,
+              },
+            }
+          : {}),
       },
       req: {
         method: req.method,

@@ -9,9 +9,7 @@
 
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
-import { businessesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { pool } from "@workspace/db";
 
 // Extend Express Request type to carry businessId
 declare global {
@@ -36,30 +34,26 @@ export async function requireBusiness(
     return;
   }
 
-  let business: { id: number } | undefined;
+  // Use the raw pg pool directly to avoid Drizzle's queryWithCache layer,
+  // which can swallow the original pg error and obscure connection issues.
+  let businessId = 0; // sentinel: 0 = no business yet
   try {
-    [business] = await db
-      .select({ id: businessesTable.id })
-      .from(businessesTable)
-      .where(eq(businessesTable.clerkUserId, userId))
-      .limit(1);
+    const result = await pool.query<{ id: number }>(
+      "SELECT id FROM businesses WHERE clerk_user_id = $1 LIMIT 1",
+      [userId],
+    );
+    if (result.rows.length > 0) {
+      businessId = result.rows[0].id;
+    }
   } catch (err) {
-    // Real DB infrastructure error (e.g. connection lost) — propagate to error handler
+    // Real DB infrastructure error — propagate to the global error handler
     next(err);
     return;
   }
 
   req.clerkUserId = userId;
-
-  if (!business) {
-    // User is authenticated but has no business yet — onboarding will create one.
-    // businessId = 0 is the sentinel value; POST /business checks for this.
-    req.businessId = 0;
-    next();
-    return;
-  }
-
-  req.businessId = business.id;
+  req.businessId = businessId;
+  // businessId === 0 → authenticated but no business yet; POST /business will create one
   next();
 }
 
