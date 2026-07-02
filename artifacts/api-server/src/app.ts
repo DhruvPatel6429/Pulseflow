@@ -15,6 +15,7 @@ import {
   requestIdMiddleware,
   securityHeadersMiddleware,
   timeoutMiddleware,
+  publicRateLimitMiddleware,
 } from "./middlewares/securityAndMonitoring";
 
 const app: Express = express();
@@ -56,7 +57,13 @@ app.use(
   })),
 );
 
-app.use("/api", router);
+// Rate limiting — applied to all /api routes.
+// Limit is read from RATE_LIMIT_MAX (requests per minute per IP); defaults to 100.
+// Invalid or non-positive values are clamped to 100 so a misconfigured env var
+// cannot silently disable the control.
+const _parsedRateLimit = parseInt(process.env["RATE_LIMIT_MAX"] ?? "", 10);
+const rateLimitMax = Number.isFinite(_parsedRateLimit) && _parsedRateLimit > 0 ? _parsedRateLimit : 100;
+app.use("/api", publicRateLimitMiddleware(rateLimitMax, 60_000), router);
 
 // Global Error Handler
 app.use(globalErrorHandler as express.ErrorRequestHandler);

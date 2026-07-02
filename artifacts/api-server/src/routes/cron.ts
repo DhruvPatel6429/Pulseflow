@@ -12,10 +12,11 @@ import { Router } from "express";
 import type { IRouter } from "express";
 import { processDueAutomationEvents } from "../lib/automation-service";
 import { logger } from "../lib/logger";
+import { requireSecret } from "../middlewares/requireSecret";
 
 const router: IRouter = Router();
 
-router.post("/cron/process-automations", async (req, res): Promise<void> => {
+router.post("/cron/process-automations", requireSecret("CRON_SECRET"), async (req, res): Promise<void> => {
   const businessId = req.query.businessId
     ? parseInt(req.query.businessId as string, 10)
     : undefined;

@@ -7,6 +7,7 @@
 import { Router } from "express";
 import type { IRouter } from "express";
 import { getAuth } from "@clerk/express";
+import { requireSecret } from "../middlewares/requireSecret";
 import { db } from "@workspace/db";
 import {
   businessesTable,
@@ -25,7 +26,7 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-router.post("/seed/demo", async (req, res): Promise<void> => {
+router.post("/seed/demo", requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   let businessId = 1;
 
@@ -366,7 +367,7 @@ router.post("/seed/demo", async (req, res): Promise<void> => {
 });
 
 // DELETE — reset demo (for re-seeding)
-router.delete("/seed/demo", async (req, res): Promise<void> => {
+router.delete("/seed/demo", requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   let businessId = 1;
 

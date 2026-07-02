@@ -396,6 +396,13 @@ Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-auto
 | `CLERK_PUBLISHABLE_KEY` | `.replit` → `[userenv]` | Clerk publishable key (`pk_test_...`) |
 | `VITE_CLERK_PUBLISHABLE_KEY` | `.replit` → `[userenv]` | Same value as above — exposed to Vite frontend |
 
+### Security secrets (required in production; optional in development)
+
+| Variable | Description |
+|---|---|
+| `CRON_SECRET` | Bearer token that protects `POST /api/cron/process-automations`. **In production, the route returns 403 if this is unset.** In development, the route is open when the variable is absent. Pass as `Authorization: Bearer <value>`. Generate with `openssl rand -hex 32`. |
+| `SEED_SECRET` | Bearer token that protects `POST /api/seed/demo` and `DELETE /api/seed/demo`. Same fail-closed production behaviour as `CRON_SECRET`. |
+
 ### Optional (app degrades gracefully without these)
 
 | Variable | Default behaviour when absent |
@@ -406,6 +413,7 @@ Jobs are stored in `reminder_jobs` and processed by `POST /api/cron/process-auto
 | `WHATSAPP_VERIFY_TOKEN` | Webhook hub verification will reject Meta's challenge |
 | `LOG_LEVEL` | Defaults to `info` (options: `trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
 | `VITE_CLERK_PROXY_URL` | Needed only in Replit production deployment (set automatically) |
+| `RATE_LIMIT_MAX` | Max requests per IP per minute across all `/api` routes. Defaults to `100`. Raise if Meta webhook deliveries are throttled. |
 
 ### Managed automatically (do not set manually)
 
