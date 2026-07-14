@@ -1,0 +1,34 @@
+Prep PulseFlow to sell to real, paying salon customers. Priority order below — a sellable SaaS needs billing and multi-tenant access before anything cosmetic. Don't touch working auth/booking logic unless a task requires it. Run pnpm run typecheck after each numbered task before moving to the next.
+
+1. BILLING (Razorpay Subscriptions — Indian market, salon owners)
+- Add a subscriptions table: businessId, plan (trial/starter/pro), status (trialing/active/past_due/cancelled), razorpaySubscriptionId, currentPeriodEnd.
+- Integrate Razorpay Subscriptions API: checkout flow on a new /billing page, webhook handler at POST /api/webhooks/razorpay for payment success/failure/cancellation events (verify webhook signature).
+- Give every new business a 14-day trial on signup (set in businesses table).
+- Add a requireActiveSubscription middleware — block access to core routes (bookings, AI inbox, automations) if trial expired and no active subscription, redirect frontend to /billing with a clear "trial ended, upgrade to continue" state. Don't block /settings or /billing itself.
+- Two plans to start: Starter (₹999/mo, 1 staff login) and Pro (₹2499/mo, up to 5 staff logins) — store the staff limit per plan for use in task 2.
+
+2. MULTI-TENANT STAFF ACCESS
+- Add a staff table: businessId, clerkUserId, role (owner/staff), invitedEmail, status (pending/active).
+- Add an /settings/team page: owner can invite staff by email (Clerk invitation flow), see pending invites, remove staff.
+- Update requireBusiness middleware to resolve staff.clerkUserId → businessId too, not just the original owner's clerkUserId.
+- Enforce the plan's staff limit from task 1 when inviting.
+- Role gating: only "owner" role can access /billing, /settings/team, and DELETE-type actions (delete service, remove staff). Staff can access bookings, inbox, customers, dashboard.
+
+3. LOCK DOWN CRON AND SEED ROUTES
+- POST /api/cron/process-automations and POST+DELETE /api/seed/demo require a Bearer token (CRON_SECRET / SEED_SECRET) in ALL environments, fail closed (403) if unset, even in dev — log a clear warning instead of silently allowing access.
+- Remove/disable the seed routes entirely behind a SEED_ENABLED=true flag that defaults false, so they can never accidentally run in front of real customer data.
+
+4. GROQ MIGRATION (replace OpenAI)
+- Swap OpenAI calls in artifacts/api-server/src/lib/ai/ and ai-engine.ts for Groq: use the openai npm SDK with baseURL "https://api.groq.com/openai/v1", model "llama-3.3-70b-versatile".
+- Replace OPENAI_API_KEY with GROQ_API_KEY everywhere (env, .env.example, Secrets, README). Keep the existing rule-based fallback when the key is absent.
+
+5. WHATSAPP: DOCUMENT THE GO-LIVE PATH
+- Sandbox/log-only mode stays as-is for demos. Add a clear /settings/whatsapp page showing connection status (sandbox vs live) and, when in sandbox, a checklist/instructions for the owner to get a real Meta Business verified number and paste in WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_VERIFY_TOKEN. This unblocks onboarding real customers without you manually walking each one through it.
+
+6. MOBILE RESPONSIVENESS
+- Audit /inbox, /bookings, /bookings/new, /customers, Dashboard, and the new /billing and /settings/team pages for 375–428px width. Fix table overflow (stack as cards on mobile), collapsible sidebar drawer, one-handed usable booking form.
+
+7. MIGRATION SAFETY
+- Switch lib/db from drizzle-kit push to drizzle-kit generate + migrate. Generate an initial migration capturing current schema. Document in README: all future schema changes go through generate → review → migrate, never push, once real customer data exists.
+
+After all 7, confirm pnpm --filter @workspace/api-server run build and pnpm --filter @workspace/pulseflow run build succeed, and update README to reflect Razorpay billing, staff roles, and Groq — remove fixed items from Known Limitations.
