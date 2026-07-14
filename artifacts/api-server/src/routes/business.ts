@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { IRouter } from "express";
 import { db } from "@workspace/db";
-import { businessesTable, automationSettingsTable } from "@workspace/db";
+import { businessesTable, automationSettingsTable, subscriptionsTable, PLANS } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   CreateBusinessBody,
@@ -66,6 +66,20 @@ router.post("/business", async (req, res): Promise<void> => {
 
   await db.insert(automationSettingsTable)
     .values({ businessId: biz.id })
+    .onConflictDoNothing();
+
+  // Provision a 14-day free trial subscription for every new business
+  const trialEndsAt = new Date();
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+  await db
+    .insert(subscriptionsTable)
+    .values({
+      businessId:       biz.id,
+      plan:             "trial",
+      status:           "trialing",
+      staffLimit:       PLANS.trial.staffLimit,
+      currentPeriodEnd: trialEndsAt,
+    })
     .onConflictDoNothing();
 
   res.status(201).json(biz);

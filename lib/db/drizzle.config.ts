@@ -11,4 +11,8 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Migrations output directory (used by drizzle-kit generate + migrate)
+  // Push (drizzle-kit push) syncs directly without generating files — dev only.
+  // For production with real customer data: always use generate → review → migrate.
+  out: path.join(__dirname, "./migrations"),
 });

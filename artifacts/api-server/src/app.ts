@@ -43,7 +43,14 @@ app.use(
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(cors({ credentials: true, origin: true }));
-app.use(express.json());
+// Capture raw body for Razorpay webhook signature verification
+app.use(
+  express.json({
+    verify: (req: express.Request & { rawBody?: string }, _res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Resolve publishable key from the incoming host so the same server

@@ -22,6 +22,15 @@ AI-powered WhatsApp front desk for solo beauty & wellness businesses in India â€
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
+## Billing & staff (new)
+
+- Razorpay Subscriptions: `artifacts/api-server/src/routes/billing.ts` + `artifacts/pulseflow/src/pages/billing.tsx`
+- Razorpay webhook: `POST /api/webhooks/razorpay` in `artifacts/api-server/src/routes/webhooks.ts`
+- requireActiveSubscription: `artifacts/api-server/src/middlewares/requireActiveSubscription.ts`
+- Staff/team: `lib/db/src/schema/staff.ts`, `artifacts/api-server/src/routes/team.ts`, `artifacts/pulseflow/src/pages/settings-team.tsx`
+- requireOwner: `artifacts/api-server/src/middlewares/requireOwner.ts`
+- Required secrets: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_STARTER_PLAN_ID`, `RAZORPAY_PRO_PLAN_ID`
+
 ## Where things live
 
 - `lib/db/src/schema/` â€” DB schema: businesses, services, customers, bookings, conversations, messages, ai_action_logs, automation_settings, reminder_jobs

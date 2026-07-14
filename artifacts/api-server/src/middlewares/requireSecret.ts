@@ -1,11 +1,10 @@
 /**
  * requireSecret — route-level secret guard.
  *
- * Behaviour:
- *   • Secret NOT set + NODE_ENV === "production"  → 403 Forbidden (fail-closed)
- *   • Secret NOT set + NODE_ENV !== "production"  → allow (dev convenience)
- *   • Secret set, header matches                  → allow
- *   • Secret set, header missing/wrong            → 401 Unauthorized
+ * Behaviour (all environments, including development):
+ *   • Secret NOT set  → 403 Forbidden (fail-closed everywhere, log a warning)
+ *   • Secret set, header matches  → allow
+ *   • Secret set, header missing/wrong  → 401 Unauthorized
  *
  * Callers supply a header of the form:
  *   Authorization: Bearer <secret>
@@ -18,6 +17,7 @@
 
 import type { Request, Response, NextFunction } from "express";
 import { createHash, timingSafeEqual } from "crypto";
+import { logger } from "../lib/logger";
 
 function constantTimeEqual(a: string, b: string): boolean {
   // Hash both strings so timingSafeEqual always receives equal-length buffers,
@@ -31,19 +31,19 @@ export function requireSecret(envVar: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const secret = process.env[envVar];
 
-    // Fail-closed in production when the secret has not been configured.
+    // Fail-closed in ALL environments — missing secret is a misconfiguration, not a dev shortcut.
     if (!secret) {
-      if (process.env["NODE_ENV"] === "production") {
-        res.status(403).json({
-          error: {
-            message: `Forbidden: ${envVar} is not configured on this server.`,
-            statusCode: 403,
-          },
-        });
-        return;
-      }
-      // Development / test: allow without a secret so local curl commands work.
-      next();
+      logger.warn(
+        { envVar, path: req.path },
+        `SECURITY: ${envVar} is not set — request blocked with 403. ` +
+        `Set ${envVar} in your environment secrets to enable this route.`,
+      );
+      res.status(403).json({
+        error: {
+          message: `Forbidden: ${envVar} is not configured on this server.`,
+          statusCode: 403,
+        },
+      });
       return;
     }
 

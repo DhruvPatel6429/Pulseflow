@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Store, MapPin, Phone, Bot, Clock, ExternalLink } from "lucide-react";
+import { Settings as SettingsIcon, Store, MapPin, Bot, Clock, ExternalLink, Users } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -271,6 +272,24 @@ export default function Settings() {
             <Input className="mt-1" type="password" value={form.whatsappVerifyToken ?? ""} onChange={(e) => set("whatsappVerifyToken", e.target.value)} placeholder="Set a secret token for Meta webhook verification" />
             <p className="text-xs text-muted-foreground mt-1">Used to verify the WhatsApp webhook URL in Meta Business Manager</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Team Management — link card for owners */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            <CardTitle className="text-base">Team</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Invite staff members to access bookings, AI inbox, and customers.
+          </p>
+          <Link href="/settings/team">
+            <Button variant="outline" size="sm">Manage team →</Button>
+          </Link>
         </CardContent>
       </Card>
 

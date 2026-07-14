@@ -1,11 +1,13 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors,
-  MessageSquare, Zap, Settings, Bot, Sparkles,
+  MessageSquare, Zap, Settings, Bot, Sparkles, CreditCard,
 } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
-const navItems = [
+const baseNavItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/bookings", icon: CalendarDays, label: "Bookings" },
   { to: "/customers", icon: Users, label: "Customers" },
@@ -15,8 +17,21 @@ const navItems = [
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
+const ownerOnlyItems = [
+  { to: "/billing", icon: CreditCard, label: "Billing" },
+];
+
 export default function Sidebar() {
   const [location] = useLocation();
+
+  const { data: roleData } = useQuery<{ role: string }>({
+    queryKey: ["my-role"],
+    queryFn: () => apiFetch<{ role: string }>("/team/my-role"),
+    staleTime: 120_000,
+  });
+  const isOwner = !roleData || roleData.role === "owner"; // default to showing owner items until loaded
+
+  const navItems = isOwner ? [...baseNavItems, ...ownerOnlyItems] : baseNavItems;
 
   return (
     <aside className="w-60 shrink-0 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">

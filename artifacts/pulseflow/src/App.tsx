@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryCache, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ClerkProvider,
   Show,
@@ -20,11 +20,13 @@ import Services from "@/pages/services";
 import Inbox from "@/pages/inbox";
 import Automations from "@/pages/automations";
 import Settings from "@/pages/settings";
+import Billing from "@/pages/billing";
+import SettingsTeam from "@/pages/settings-team";
 import Onboarding from "@/pages/onboarding";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
 import NotFound from "@/pages/not-found";
-import { apiFetch, isMissingBusinessResponse } from "@/lib/api";
+import { apiFetch, isMissingBusinessResponse, ApiFetchError } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // REQUIRED — resolves publishable key from hostname (supports custom domains)
@@ -68,9 +70,26 @@ const clerkAppearance = {
   },
 };
 
+// Module-level setter so the QueryCache error handler (outside React) can navigate
+let _redirectToBilling: (() => void) | null = null;
+
 const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => {
+      if (error instanceof ApiFetchError && error.status === 402) {
+        _redirectToBilling?.();
+      }
+    },
+  }),
   defaultOptions: {
-    queries: { retry: 1, staleTime: 5000 },
+    queries: {
+      staleTime: 5000,
+      retry: (failureCount, error) => {
+        // Never retry subscription-gated 402s — user needs to go to billing
+        if (error instanceof ApiFetchError && error.status === 402) return false;
+        return failureCount < 1;
+      },
+    },
   },
 });
 
@@ -95,7 +114,16 @@ function ClerkCacheInvalidator() {
 }
 
 function AppGuard() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+
+  // Wire the module-level redirect so the QueryCache global error handler
+  // can push to /billing when any protected query returns 402
+  useEffect(() => {
+    _redirectToBilling = () => {
+      if (location !== "/billing") navigate("/billing");
+    };
+    return () => { _redirectToBilling = null; };
+  }, [location, navigate]);
 
   const { data: business, isLoading } = useQuery<{ id?: number; isOnboarded: boolean } | null>({
     queryKey: ["business"],
@@ -144,6 +172,8 @@ function AppGuard() {
         <Route path="/inbox" component={Inbox} />
         <Route path="/automations" component={Automations} />
         <Route path="/settings" component={Settings} />
+        <Route path="/settings/team" component={SettingsTeam} />
+        <Route path="/billing" component={Billing} />
         <Route path="/onboarding" component={Onboarding} />
         <Route component={NotFound} />
       </Switch>

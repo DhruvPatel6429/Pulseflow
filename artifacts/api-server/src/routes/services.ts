@@ -7,6 +7,7 @@ import {
   CreateServiceBody,
   UpdateServiceBody,
 } from "@workspace/api-zod";
+import { requireOwner } from "../middlewares/requireOwner";
 
 const router: IRouter = Router();
 
@@ -64,7 +65,7 @@ router.patch("/services/:id", async (req, res): Promise<void> => {
   res.json({ ...svc, price: Number(svc.price) });
 });
 
-router.delete("/services/:id", async (req, res): Promise<void> => {
+router.delete("/services/:id", requireOwner as never, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   await db.delete(servicesTable)

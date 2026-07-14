@@ -28,6 +28,26 @@ async function runDiagnostics() {
     logger.warn({ missing }, "Missing recommended production environment variables");
   }
 
+  // 2. Warn about missing security secrets — routes will fail-closed (403) without these
+  if (!process.env["CRON_SECRET"]) {
+    logger.warn(
+      "CRON_SECRET is not set — POST /api/cron/process-automations will return 403 for all requests. " +
+      "Set CRON_SECRET in environment secrets to enable cron automation delivery.",
+    );
+  }
+  if (!process.env["RAZORPAY_WEBHOOK_SECRET"]) {
+    logger.warn("RAZORPAY_WEBHOOK_SECRET is not set — Razorpay webhooks will be rejected with 403.");
+  }
+  if (process.env["SEED_ENABLED"] === "true") {
+    logger.warn(
+      "SEED_ENABLED=true — demo seed routes are active. " +
+      "Disable this (unset SEED_ENABLED) before storing real customer data.",
+    );
+    if (!process.env["SEED_SECRET"]) {
+      logger.warn("SEED_ENABLED=true but SEED_SECRET is not set — seed routes will return 403.");
+    }
+  }
+
   // 2. Validate database connection
   try {
     await db.execute(sql`SELECT 1`);

@@ -508,24 +508,60 @@ Replit handles production deployment via the artifact configuration in `artifact
 
 ---
 
+## Billing (Razorpay Subscriptions)
+
+Every new business gets a **14-day free trial** on signup. After the trial, salon owners must subscribe to continue using core features (bookings, AI inbox, automations).
+
+**Plans:**
+| Plan | Price | Staff logins |
+|---|---|---|
+| Starter | ₹999/month | 1 |
+| Pro | ₹2499/month | Up to 5 |
+
+**Setup:**
+1. Create plans in the Razorpay Dashboard → Subscriptions → Plans
+2. Set environment secrets: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_STARTER_PLAN_ID`, `RAZORPAY_PRO_PLAN_ID`
+3. Configure Razorpay webhook to `POST /api/webhooks/razorpay`
+
+**Routes:** `GET /api/billing/subscription`, `POST /api/billing/checkout`, `POST /api/billing/cancel`, `POST /api/webhooks/razorpay`
+
+---
+
+## Staff & Team Access
+
+Owners can invite staff members from **Settings → Team** or the `/billing` page. Staff can access bookings, AI inbox, and customers — but not billing or team management.
+
+**Role model:**
+- `owner` — full access including `/billing`, `/settings/team`, and destructive actions (delete service, remove staff)
+- `staff` — access to bookings, inbox, customers, dashboard only
+
+**Invitation flow:** Owner invites by email → Clerk sends invite → staff member signs up → their clerkUserId is auto-linked on first sign-in.
+
+**Staff limit** is enforced per plan (1 for Starter, 5 for Pro).
+
+**Routes:** `GET /api/team`, `GET /api/team/my-role`, `POST /api/team/invite`, `DELETE /api/team/:id`
+
+---
+
 ## Drizzle ORM & Database
 
-Schema lives in `lib/db/src/schema/`. To make schema changes:
+Schema lives in `lib/db/src/schema/`. The project now uses **drizzle-kit generate + migrate** for a safe, reviewable migration history. An initial migration (`lib/db/migrations/0000_*.sql`) captures the full schema as of the first production-ready release.
+
+**Workflow for all schema changes once real customer data exists:**
 
 ```bash
-# Edit the schema files in lib/db/src/schema/
+# 1. Edit schema files in lib/db/src/schema/
+# 2. Generate a migration file (review before applying!)
+pnpm --filter @workspace/db run generate
 
-# Apply changes to the database
-pnpm --filter @workspace/db run push
+# 3. Apply the migration to the database
+pnpm --filter @workspace/db run migrate
 
-# Force push (skips safety prompts — use only in development)
-pnpm --filter @workspace/db run push-force
-
-# TypeScript check the lib packages after schema changes
+# 4. TypeScript check libs after schema changes
 pnpm run typecheck:libs
 ```
 
-> **Note:** This project uses `drizzle-kit push` (direct schema sync), not migration files. This is appropriate for development. For production, consider switching to `drizzle-kit generate` + `drizzle-kit migrate` for a proper migration history before going live.
+> ⚠️ **Never use `drizzle-kit push` once real customer data exists.** Push syncs directly without a migration log — destructive changes (dropping columns, renaming tables) happen immediately and cannot be rolled back automatically. Use `generate` + review + `migrate` instead.
 
 > **Important:** After adding or modifying schema files, always run `pnpm run typecheck:libs` before running `pnpm -r run typecheck`. The lib typecheck must complete first for the API server's TypeScript build to resolve shared types correctly.
 
@@ -535,12 +571,8 @@ pnpm run typecheck:libs
 
 | Area | Limitation |
 |---|---|
-| **Cron / Automations** | `POST /api/cron/process-automations` has no authentication. In production, protect it with a shared secret header or IP allowlist before exposing to the internet. |
-| **Seed routes** | `POST /api/seed/demo` and `DELETE /api/seed/demo` are public with no auth. Remove or gate these routes before production launch. |
 | **WhatsApp** | Requires a verified Meta Business account and an approved WhatsApp Business number. Sandbox mode works for development and demo but sends no real messages. |
 | **OpenAI AI replies** | Without `OPENAI_API_KEY`, the AI falls back to rule-based keyword templates. These cover common intents but will not handle free-form or ambiguous messages gracefully. |
-| **Single-tenant per Clerk user** | Each authenticated Clerk user maps to exactly one `businesses` row. There is no multi-business or team/staff model. |
-| **No migration history** | `drizzle-kit push` syncs schema directly without a migration log. Destructive schema changes (dropping columns) are applied immediately and cannot be rolled back automatically. |
-| **Bundle size** | The frontend JS bundle is ~553 kB minified / 165 kB gzip. Vite warns about this. Code-splitting (dynamic imports) would reduce initial load time. |
+| **Bundle size** | The frontend JS bundle is ~568 kB minified / 168 kB gzip. Vite warns about this. Code-splitting (dynamic imports) would reduce initial load time. |
 | **Timezone handling** | Working hours are stored as plain `HH:MM` strings interpreted in the business's configured timezone. The slot engine does not yet account for DST transitions. |
-| **No rate limiting** | The API has no rate limiting on public endpoints (webhook, healthz, seed). Add a rate limiter (e.g. `express-rate-limit`) before exposing to the public internet. |
+| **Cron auth** | `POST /api/cron/process-automations` requires `CRON_SECRET` Bearer token in all environments (fails 403 if unset). Set `CRON_SECRET` in secrets before enabling automation delivery. |

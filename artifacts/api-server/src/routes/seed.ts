@@ -5,7 +5,7 @@
  */
 
 import { Router } from "express";
-import type { IRouter } from "express";
+import type { IRouter, Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { requireSecret } from "../middlewares/requireSecret";
 import { db } from "@workspace/db";
@@ -26,7 +26,22 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-router.post("/seed/demo", requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
+/**
+ * Seed routes are disabled by default (SEED_ENABLED defaults to false).
+ * Set SEED_ENABLED=true in your environment secrets only in controlled dev/demo environments.
+ * NEVER enable seed routes when real customer data exists.
+ */
+const SEED_ENABLED = process.env["SEED_ENABLED"] === "true";
+
+function seedGuard(req: Request, res: Response, next: NextFunction): void {
+  if (!SEED_ENABLED) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+}
+
+router.post("/seed/demo", seedGuard, requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   let businessId = 1;
 
@@ -367,7 +382,7 @@ router.post("/seed/demo", requireSecret("SEED_SECRET"), async (req, res): Promis
 });
 
 // DELETE — reset demo (for re-seeding)
-router.delete("/seed/demo", requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
+router.delete("/seed/demo", seedGuard, requireSecret("SEED_SECRET"), async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   let businessId = 1;
 

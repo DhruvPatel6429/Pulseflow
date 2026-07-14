@@ -1,5 +1,8 @@
 - [Drizzle queryWithCache / Neon](drizzle-neon-pool.md) — Drizzle fails on Neon for parameterized queries in middleware; use raw pool.query() in requireBusiness; errorMiddleware now logs err.cause
 - [PulseFlow architecture](pulseflow-arch.md) — DB lib stale declarations bug: after adding schema files, always run `pnpm run typecheck:libs` before api-server typecheck
-- [PulseFlow stack](pulseflow-arch.md) — single-tenant MVP (DEFAULT_BUSINESS_ID=1), WhatsApp sandbox mode unless env vars set, rule-based AI intent engine
-- [PulseFlow automation engine](pulseflow-arch.md) — createAutomationEvent() is idempotent; processDueAutomationEvents() handles scheduling; seed route is re-entrant (wipes+reseeds if business exists)
-- [PulseFlow demo seed](pulseflow-arch.md) — POST /api/seed/demo re-seeds GlowNest Studio even if business exists; DELETE /api/seed/demo clears all data; safe to run repeatedly
+- [PulseFlow stack](pulseflow-arch.md) — single-tenant MVP upgraded to multi-tenant staff model; 14-day trial + Razorpay subscriptions; rule-based AI intent engine
+- [PulseFlow automation engine](pulseflow-arch.md) — createAutomationEvent() is idempotent; processDueAutomationEvents() handles scheduling; seed route now requires SEED_ENABLED=true
+- [PulseFlow billing](pulseflow-billing.md) — Razorpay subscription flow; requireActiveSubscription middleware; 402 redirects to /billing via global QueryCache handler
+- [PulseFlow staff access](pulseflow-staff.md) — staff table links clerkUserId→businessId; auto-accept on first sign-in by email match; requireOwner guards billing+destructive routes
+- [PulseFlow migration safety](pulseflow-arch.md) — switched to drizzle-kit generate+migrate; initial migration at lib/db/migrations/0000_*.sql; never use push with real customer data
+- [PulseFlow security](pulseflow-arch.md) — requireSecret now fails-closed in ALL envs (not just prod); seed routes disabled unless SEED_ENABLED=true
